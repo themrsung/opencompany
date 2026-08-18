@@ -1,0 +1,23 @@
+# Build output
+target/
+dist/
+node_modules/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# Local configuration and data
+.env
+backups/
+/var/
+
+# Tooling
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Test and coverage output
+*.log
+coverage/
+.nyc_output/

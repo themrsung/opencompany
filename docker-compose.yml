@@ -1,0 +1,107 @@
+# CoreIntra — the single-box deployment.
+#
+# Four containers: PostgreSQL, the API, the conversion worker, and a reverse
+# proxy serving the built SPA. No cloud-managed services; file storage is a
+# local volume behind the BlobStore interface.
+#
+# Target footprint: 4 vCPU / 12 GB, ~300 concurrent users. The conversion worker
+# is the reason that number is what it is — see docs/deploy/sizing.md.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Korean text is stored and collated here; C.UTF-8 keeps ordering
+      # predictable and locale-independent, and the application never relies on
+      # database collation for user-visible sorting.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Not published by default: nothing outside this box needs the database.
+    # Uncomment only for debugging, and put it back.
+    # ports: ["${POSTGRES_PORT}:5432"]
+
+  api:
+    build:
+      context: .
+      dockerfile: ops/api.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      COREINTRA_INSTALLATION_NAME: ${COREINTRA_INSTALLATION_NAME}
+      COREINTRA_DEFAULT_LOCALE: ${COREINTRA_DEFAULT_LOCALE}
+      COREINTRA_SESSION_SIGNING_KEY: ${COREINTRA_SESSION_SIGNING_KEY}
+      COREINTRA_BLOB_PATH: /var/lib/coreintra/blobs
+      COREINTRA_FONT_PATH: /var/lib/coreintra/fonts
+      COREINTRA_CONVERSION_URL: http://conversion-worker:3000
+      COREINTRA_CONVERSION_SYNC_TIMEOUT_MS: ${COREINTRA_CONVERSION_SYNC_TIMEOUT_MS}
+      COREINTRA_ACCOUNTING_ENABLED: ${COREINTRA_ACCOUNTING_ENABLED}
+      COREINTRA_TEMPORARY_MASTER_DISABLED: ${COREINTRA_TEMPORARY_MASTER_DISABLED}
+      COREINTRA_SMTP_HOST: ${COREINTRA_SMTP_HOST}
+      COREINTRA_SMTP_PORT: ${COREINTRA_SMTP_PORT}
+      COREINTRA_SMTP_USERNAME: ${COREINTRA_SMTP_USERNAME}
+      COREINTRA_SMTP_PASSWORD: ${COREINTRA_SMTP_PASSWORD}
+      COREINTRA_SMTP_FROM: ${COREINTRA_SMTP_FROM}
+    volumes:
+      - blob-data:/var/lib/coreintra/blobs
+      # Fonts are shared with the conversion worker: one uploaded font must be
+      # visible to fontconfig, to the browser as a webfont, and to mdv's
+      # pdf.fonts config. Same volume, one record, three consumers.
+      - font-data:/var/lib/coreintra/fonts
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  conversion-worker:
+    build:
+      context: .
+      dockerfile: ops/conversion-worker.Dockerfile
+    restart: unless-stopped
+    environment:
+      COREINTRA_CONVERSION_POOL_SIZE: ${COREINTRA_CONVERSION_POOL_SIZE}
+      COREINTRA_FONT_PATH: /var/lib/coreintra/fonts
+    volumes:
+      # Read-only: the worker consumes fonts, it never installs them. Installs
+      # go through the API so they are audited and acknowledged.
+      - font-data:/var/lib/coreintra/fonts:ro
+      - blob-data:/var/lib/coreintra/blobs
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    # Restartable independently of everything else: a wedged worker must degrade
+    # exports, not the intranet.
+    stop_grace_period: 30s
+
+  web:
+    build:
+      context: .
+      dockerfile: ops/web.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${COREINTRA_HTTP_PORT}:80"
+
+volumes:
+  postgres-data:
+  blob-data:
+  font-data:

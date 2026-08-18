@@ -274,4 +274,66 @@ class ArchitectureRulesTest {
             rule.allowEmptyShould(true).check(production);
         }
     }
+
+    @Nested
+    @DisplayName("The wire format is a contract (ADR 0009)")
+    class WireFormat {
+
+        @Test
+        @DisplayName("no response carries a BigDecimal, because JSON numbers lose money")
+        void amountsCrossTheWireAsStrings() {
+            // §9: amounts cross the wire as exact decimal strings, never JSON
+            // numbers. A BigDecimal on a response type is one Jackson
+            // configuration change away from being serialised as a number, and
+            // 1400000.25 arriving as a double is a rounding error nobody sees
+            // until a reconciliation fails months later. Keeping the type off
+            // the boundary entirely is the only version of this rule that
+            // cannot be undone by a setting.
+            //
+            // Scoped to getters, which is what Jackson serialises. Parsing an
+            // incoming amount string into a BigDecimal is the correct inbound
+            // move and must stay allowed; it is the outbound direction that
+            // loses money.
+            ArchRule rule = noMethods()
+                    .that().areDeclaredInClassesThat().resideInAPackage("com.coreintra.app.api..")
+                    .and().arePublic()
+                    .and().haveNameMatching("(get|is)[A-Z].*")
+                    .should().haveRawReturnType("java.math.BigDecimal")
+                    .because("§9 requires exact decimal strings on the wire. Format the value "
+                            + "with toPlainString() on the DTO.");
+            rule.allowEmptyShould(true).check(production);
+        }
+
+        @Test
+        @DisplayName("no JPA entity is reachable from a controller signature")
+        void controllersDoNotReturnEntities() {
+            // An entity on a controller signature leaks the schema into the wire
+            // format — every column rename becomes a breaking API change — and
+            // drags lazy loading into the serialiser, where the session is
+            // already closed. Both failures appear long after the commit.
+            ArchRule rule = noMethods()
+                    .that().areDeclaredInClassesThat().areAnnotatedWith(
+                            "org.springframework.web.bind.annotation.RestController")
+                    .and().arePublic()
+                    .should().haveRawReturnType(
+                            com.tngtech.archunit.base.DescribedPredicate.describe(
+                                    "a JPA entity",
+                                    javaClass -> javaClass.isAnnotatedWith("javax.persistence.Entity")))
+                    .because("controllers return DTOs. An entity on the boundary makes the schema "
+                            + "the API and serialises a detached lazy proxy.");
+            rule.allowEmptyShould(true).check(production);
+        }
+
+        @Test
+        @DisplayName("controllers live where the OpenAPI generator looks for them")
+        void controllersAreInTheApiPackages() {
+            ArchRule rule = classes()
+                    .that().areAnnotatedWith(
+                            "org.springframework.web.bind.annotation.RestController")
+                    .should().resideInAnyPackage("com.coreintra.app.api..", "com.coreintra.app.mcp..")
+                    .because("the committed OpenAPI document is the contract, and an endpoint "
+                            + "somewhere else is one nobody reviews and no client can call.");
+            rule.allowEmptyShould(true).check(production);
+        }
+    }
 }

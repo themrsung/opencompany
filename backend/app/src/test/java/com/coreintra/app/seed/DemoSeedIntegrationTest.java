@@ -33,7 +33,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.env.MockEnvironment;
 import org.springframework.test.context.ActiveProfiles;
@@ -301,28 +300,36 @@ class DemoSeedIntegrationTest {
      * else's data" the seed is supposed to refuse.
      */
     private void emptyTheInstallation() {
-        // Deleted rather than truncated: audit_log is append-only at the database level and
-        // refuses TRUNCATE by trigger, and TRUNCATE ... CASCADE would drag it in through its
-        // foreign keys. Deleting in retried passes rather than in a hand-written order means
-        // this keeps working when somebody adds a table.
-        List<String> remaining = jdbc.queryForList(
-                "select tablename from pg_tables where schemaname = 'public' "
-                        + "and tablename not in ('flyway_schema_history', 'audit_log')",
+        // Under session_replication_role = 'replica', which suspends foreign-key
+        // enforcement and user triggers together for this session. The reasoning is
+        // DatabaseTestSupport#resetSchema's, and it applies here for the same reason.
+        //
+        // The retried-passes version this replaces could not converge, and why is worth
+        // recording. audit_log was excluded from the deletion because it is append-only —
+        // but it carries foreign keys to user_account and company. So once any earlier
+        // test had written anything, an audit row pinned both tables, and every pass
+        // failed on the same nine. It reads like a missing table ordering and is a cycle
+        // that no ordering can break.
+        //
+        // It only bites in a full-suite run: these tests pass alone against a fresh
+        // database, because nothing has written an audit row yet. That is exactly why it
+        // survived — the failure appears in whichever job runs the whole suite, far from
+        // the code that causes it.
+        //
+        // The append-only guarantee is untouched. It is a database-level trigger, this
+        // needs a superuser session on the database itself, and no account of the
+        // application has that route. The role is restored in a finally.
+        List<String> tables = jdbc.queryForList(
+                "select quote_ident(tablename) from pg_tables where schemaname = 'public' "
+                        + "and tablename <> 'flyway_schema_history'",
                 String.class);
-        for (int pass = 0; pass < 6 && !remaining.isEmpty(); pass++) {
-            List<String> blocked = new ArrayList<String>();
-            for (String table : remaining) {
-                try {
-                    jdbc.execute("delete from " + table);
-                } catch (DataAccessException stillHasChildren) {
-                    blocked.add(table);
-                }
+        jdbc.execute("set session_replication_role = 'replica'");
+        try {
+            for (String table : tables) {
+                jdbc.execute("delete from " + table);
             }
-            remaining = blocked;
-        }
-        if (!remaining.isEmpty()) {
-            throw new IllegalStateException("could not empty " + remaining
-                    + " before seeding; the demo seed needs an empty installation");
+        } finally {
+            jdbc.execute("set session_replication_role = 'origin'");
         }
     }
 }

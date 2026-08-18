@@ -21,5 +21,8 @@
     </dependency>
     <dependency><groupId>com.coreintra</groupId><artifactId>platform-compat</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>com.coreintra</groupId><artifactId>business-time</artifactId><version>${project.version}</version></dependency>
-    <dependency><groupId>com.coreintra</groupId><artifactId>core-domain</artifactId><version>${project.version}</version></dependency>  </dependencies>
+    <dependency><groupId>com.coreintra</groupId><artifactId>core-domain</artifactId><version>${project.version}</version></dependency>
+    <!-- The temporary master account is issued under the company's representation
+         mode, so it needs RepresentationMode and ApprovalState from approval. -->
+    <dependency><groupId>com.coreintra</groupId><artifactId>approval</artifactId><version>${project.version}</version></dependency>  </dependencies>
 </project>

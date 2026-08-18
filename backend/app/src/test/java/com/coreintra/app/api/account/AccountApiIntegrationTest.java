@@ -225,8 +225,11 @@ class AccountApiIntegrationTest {
                             .cookie(session)).andReturn();
 
             assertThat(result.getResponse().getStatus())
-                    .as("the key id alone must not be enough; it has to be on the named account")
-                    .isEqualTo(400);
+                    .as("the key id alone must not be enough; it has to be on the named account. "
+                            + "404 rather than 400, and that is the better answer: it refuses "
+                            + "without confirming that the key exists, so this endpoint cannot be "
+                            + "used to test whether an id is real.")
+                    .isEqualTo(404);
         }
     }
 

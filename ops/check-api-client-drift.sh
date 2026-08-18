@@ -22,11 +22,15 @@ fi
 
 pnpm --dir frontend --filter @coreintra/api-client generate
 
-if ! git diff --quiet -- docs/api/openapi.json frontend/packages/api-client/src/schema.d.ts; then
+# Against HEAD, not the index. `git diff` alone ignores anything already
+# staged, so running this locally after `git add` reported success on files it
+# had not compared. On a fresh CI checkout the two are the same; the difference
+# only shows up where someone would most want the answer to be honest.
+if ! git diff --quiet HEAD -- docs/api/openapi.json frontend/packages/api-client/src/schema.d.ts; then
   echo >&2
   echo "The generated API client is out of date." >&2
   echo >&2
-  git --no-pager diff --stat -- docs/api/openapi.json frontend/packages/api-client/src/schema.d.ts >&2
+  git --no-pager diff --stat HEAD -- docs/api/openapi.json frontend/packages/api-client/src/schema.d.ts >&2
   echo >&2
   echo "Regenerate and commit:" >&2
   echo "  cd backend && ./mvnw -B -q -pl app -am test -Dtest=OpenApiSpecTest" >&2

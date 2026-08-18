@@ -119,9 +119,9 @@ class TemporaryMasterControllerTest {
         };
     }
 
-    private static TemporaryMasterController.IssueRequest validRequest() {
-        TemporaryMasterController.IssueRequest request =
-                new TemporaryMasterController.IssueRequest();
+    private static TemporaryMasterController.TemporaryMasterIssueRequest validRequest() {
+        TemporaryMasterController.TemporaryMasterIssueRequest request =
+                new TemporaryMasterController.TemporaryMasterIssueRequest();
         request.setCompanyId("acme");
         request.setCompanyName("주식회사 에이컴");
         request.setAccountId("acc-support");
@@ -133,7 +133,7 @@ class TemporaryMasterControllerTest {
         request.setRepresentationMode("SEVERAL");
         request.setRequiredApprovals(1);
 
-        TemporaryMasterController.Approver approver = new TemporaryMasterController.Approver();
+        TemporaryMasterController.TemporaryMasterApproverRequest approver = new TemporaryMasterController.TemporaryMasterApproverRequest();
         approver.setAccountId("acc-rep");
         approver.setName("김대표");
         request.setApprovedBy(Immutables.listOf(approver));
@@ -177,7 +177,7 @@ class TemporaryMasterControllerTest {
         @Test
         @DisplayName("a mismatched company name refuses and quotes what should have been typed")
         void mismatchRefused() {
-            TemporaryMasterController.IssueRequest request = validRequest();
+            TemporaryMasterController.TemporaryMasterIssueRequest request = validRequest();
             request.setTypedCompanyName("에이컴");
 
             assertThatThrownBy(() -> controller.issue(request))
@@ -190,7 +190,7 @@ class TemporaryMasterControllerTest {
         @Test
         @DisplayName("surrounding whitespace does not defeat it, and does not pass it either")
         void whitespaceTolerated() {
-            TemporaryMasterController.IssueRequest request = validRequest();
+            TemporaryMasterController.TemporaryMasterIssueRequest request = validRequest();
             request.setTypedCompanyName("  주식회사 에이컴  ");
             // Built before the stubbing call, not inside it: grantStub() stubs
             // its own mock, and Mockito reads a stubbing that starts while
@@ -211,7 +211,7 @@ class TemporaryMasterControllerTest {
         @Test
         @DisplayName("a capability with no plain-language wording refuses issuance")
         void undescribedCapabilityRefused() {
-            TemporaryMasterController.IssueRequest request = validRequest();
+            TemporaryMasterController.TemporaryMasterIssueRequest request = validRequest();
             request.setCapabilities(Immutables.listOf("approval.document:read", "some.new:thing"));
 
             assertThatThrownBy(() -> controller.issue(request))
@@ -224,7 +224,7 @@ class TemporaryMasterControllerTest {
         @Test
         @DisplayName("a never-grantable capability is refused before it reaches the service")
         void neverGrantableRefused() {
-            TemporaryMasterController.IssueRequest request = validRequest();
+            TemporaryMasterController.TemporaryMasterIssueRequest request = validRequest();
             request.setCapabilities(Immutables.listOf("admin.permission:grant"));
 
             assertThatThrownBy(() -> controller.issue(request))
@@ -236,7 +236,7 @@ class TemporaryMasterControllerTest {
         @Test
         @DisplayName("an empty capability list is allowed — a session that can read nothing is valid")
         void nothingTickedIsValid() {
-            TemporaryMasterController.IssueRequest request = validRequest();
+            TemporaryMasterController.TemporaryMasterIssueRequest request = validRequest();
             request.setCapabilities(new ArrayList<String>());
             TemporaryMasterGrantRow issued = grantStub();
             when(sessions.issue(any(TemporaryMasterIssuance.class))).thenReturn(issued);

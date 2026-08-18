@@ -15,14 +15,57 @@
  */
 import type { Translated } from '../en.js';
 
+import { accountingEn, accountingKo } from './accounting.js';
+import { approvalEn, approvalKo } from './approval.js';
+import { auditEn, auditKo } from './audit.js';
+import { documentsEn, documentsKo } from './documents.js';
+import { fontsEn, fontsKo } from './fonts.js';
 import { inboxEn, inboxKo } from './inbox.js';
+import { leaveEn, leaveKo } from './leave.js';
+import { orgEn, orgKo } from './org.js';
+import { permissionsEn, permissionsKo } from './permissions.js';
+import { signinEn, signinKo } from './signin.js';
+import { supportEn, supportKo } from './support.js';
+import { whosinEn, whosinKo } from './whosin.js';
 
+/**
+ * The keys below are merged over the shared catalogue, one level deep. A key
+ * that already exists there replaces it wholesale rather than extending it,
+ * which is why the permission explainer registers as `explainer`: the shared
+ * catalogue owns `permissions`, and this screen needs both. The accounting
+ * screens register as `ledger` for the same reason — `accounting` in the shared
+ * catalogue is the vocabulary (debit, credit, trial balance) that every screen
+ * borrows, and replacing it would take it away from all of them. The document
+ * and font screens register as `docs` and `fontManager` on the same grounds.
+ */
 export const screensKo = {
+  approvalDoc: approvalKo,
+  audit: auditKo,
+  docs: documentsKo,
+  explainer: permissionsKo,
+  fontManager: fontsKo,
+  ledger: accountingKo,
   inbox: inboxKo,
+  leave: leaveKo,
+  org: orgKo,
+  signin: signinKo,
+  support: supportKo,
+  whosin: whosinKo,
 } as const;
 
 export type ScreenResources = typeof screensKo;
 
 export const screensEn: Translated<ScreenResources> = {
+  approvalDoc: approvalEn,
+  audit: auditEn,
+  docs: documentsEn,
+  explainer: permissionsEn,
+  fontManager: fontsEn,
+  ledger: accountingEn,
   inbox: inboxEn,
+  leave: leaveEn,
+  org: orgEn,
+  signin: signinEn,
+  support: supportEn,
+  whosin: whosinEn,
 };

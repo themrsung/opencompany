@@ -99,6 +99,36 @@ export class ApiClient {
   }
 
   /**
+   * Uploads a form, for the endpoints that take a file.
+   *
+   * <p>A document is bytes. Base64ing it into a JSON string inflates it by a
+   * third and holds the whole thing in memory twice, so font installs, template
+   * publishes and document uploads are `multipart/form-data`.
+   *
+   * <p>It goes through the same path as everything else — single-flight refresh
+   * on a 401, problem+json on a failure, the same idempotency key on a replay —
+   * because a second transport is a second place for those to be subtly
+   * different. The one difference is that the body is not serialised and the
+   * content type is left to the browser, which has to set the multipart
+   * boundary itself.
+   */
+  async postForm<T>(
+    path: string,
+    form: FormData,
+    options: Omit<RequestOptions, 'method' | 'body'> = {},
+  ): Promise<T> {
+    return (await this.request<T>(path, { ...options, method: 'POST', body: form })).data;
+  }
+
+  async putForm<T>(
+    path: string,
+    form: FormData,
+    options: Omit<RequestOptions, 'method' | 'body'> = {},
+  ): Promise<T> {
+    return (await this.request<T>(path, { ...options, method: 'PUT', body: form })).data;
+  }
+
+  /**
    * Walks a cursor-paginated collection.
    *
    * An async generator rather than a "fetch all" helper, so a caller that only
@@ -133,7 +163,11 @@ export class ApiClient {
     const method = options.method ?? 'GET';
     const headers = new Headers({ accept: options.accept ?? 'application/json' });
 
-    if (options.body !== undefined) {
+    // FormData sets its own content type, including the multipart boundary the
+    // browser generates. Setting it by hand produces a body the server cannot
+    // parse, and the error says nothing useful.
+    const isForm = typeof FormData !== 'undefined' && options.body instanceof FormData;
+    if (options.body !== undefined && !isForm) {
       headers.set('content-type', 'application/json');
     }
     if (options.ifMatch !== undefined) {
@@ -149,7 +183,9 @@ export class ApiClient {
       // The session cookie is HttpOnly and first-party. Nothing here reads it,
       // which is the point: script cannot exfiltrate what script cannot see.
       credentials: 'same-origin',
-      ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+      ...(options.body === undefined
+        ? {}
+        : { body: isForm ? (options.body as FormData) : JSON.stringify(options.body) }),
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     };
 

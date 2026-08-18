@@ -3,61 +3,53 @@ package com.coreintra.app.seed;
 import com.coreintra.approval.domain.ApprovalStepKind;
 import com.coreintra.approval.domain.RepresentationMode;
 import com.coreintra.approval.domain.RoleExpression;
-import com.coreintra.approval.entity.ApprovalLineTemplateEntity;
-import com.coreintra.approval.entity.ApprovalTemplateStepEntity;
-import com.coreintra.approval.entity.CompanyRepresentationEntity;
-import com.coreintra.approval.repository.ApprovalLineTemplateRepository;
-import com.coreintra.approval.repository.ApprovalTemplateStepRepository;
-import com.coreintra.approval.repository.CompanyRepresentationRepository;
+import com.coreintra.approval.service.ApprovalLineTemplateWriteService;
+import com.coreintra.approval.service.ApprovalLineTemplateWriteService.StepDefinition;
+import com.coreintra.approval.service.CompanyRepresentationService;
 import com.coreintra.approval.service.EmploymentRulesService;
 import com.coreintra.app.config.ApprovalWiring;
+import com.coreintra.app.install.InstallationGrants;
 import com.coreintra.auth.service.AuthenticationService;
+import com.coreintra.auth.service.MasterAccountService;
+import com.coreintra.auth.service.UserAccountService;
 import com.coreintra.auth.totp.Base32;
 import com.coreintra.auth.totp.TotpGenerator;
 import com.coreintra.core.org.UserAccount;
 import com.coreintra.core.org.repository.CompanyRepository;
 import com.coreintra.core.org.repository.UserAccountRepository;
-import com.coreintra.core.permission.GrantSource;
-import com.coreintra.core.permission.PermissionGrantRepository;
-import com.coreintra.core.permission.PermissionGrantRow;
-import com.coreintra.core.permission.PermissionKey;
 import com.coreintra.core.permission.PermissionPrincipal;
-import com.coreintra.core.permission.PermissionScope;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
- * The four things the seed cannot ask a service to do for it.
+ * What the demo seed needs before it can behave like a user, and where it gets it.
  *
- * <p>Everything else in the demo goes through the same services the REST layer calls, with a
- * real {@link PermissionPrincipal}, because a seed that writes rows proves nothing and rots
- * silently. These four have no service to go through at all, and each is a gap in the product
- * rather than a shortcut taken here:
+ * <p>This class used to write four kinds of row directly — accounts, the first grants, the
+ * representation mode and the approval line templates — because nothing in the product could.
+ * All four now have a service, so all four are calls:
  *
- * <ol>
- *   <li><b>User accounts.</b> Nothing in the application creates one. {@code AuthenticationService}
- *       enrols an account that already exists, {@code MasterAccountService} promotes and demotes
- *       one, {@code AccountSubjects} reads one. There is no create path, from REST or anywhere
- *       else, so a fresh installation cannot produce its first account.</li>
- *   <li><b>The first grants.</b> {@code PermissionGrantService} refuses to hand out a permission
- *       the caller does not already hold - which is right, and which means the first grant in an
- *       installation cannot come from it. Somebody has to write the operator's row.</li>
- *   <li><b>The representation mode.</b> {@code company_representation} is read by
- *       {@code JpaRepresentationDirectory} and written by nothing. Without a row, every
- *       submission throws, because the module refuses to guess whether a company is 각자대표 or
- *       공동대표.</li>
- *   <li><b>Approval line templates.</b> §6.8 of the brief is unbuilt: the tables exist, the store
- *       reads them, no code writes them.</li>
- * </ol>
+ * <ul>
+ *   <li>{@link UserAccountService} creates accounts, including the one an empty installation has
+ *       no caller to authorise;</li>
+ *   <li>{@link InstallationGrants} writes the first grants, and refuses once any grant
+ *       exists;</li>
+ *   <li>{@link CompanyRepresentationService} records 각자대표 / 공동대표;</li>
+ *   <li>{@link ApprovalLineTemplateWriteService} writes 결재선 서식.</li>
+ * </ul>
  *
- * <p>They are isolated here, and only here, so that the day any of those four grows a service the
- * change is one file. The rest of the seed is honest about what a real user can do.
+ * <p>What is left here is demo <em>data</em>: which people get accounts, which company is
+ * 공동대표 and with what quorum, and the five approval lines the demo's documents travel down.
+ * The seed is now honest end to end — every row it produces could have been produced by
+ * somebody clicking, or by the installer on first boot.
+ *
+ * <p>It is not gone entirely because the demo's shape is its own: a real installation opens with
+ * {@code POST /api/v1/install}, which creates one company with the factory defaults, whereas the
+ * demo wants two legal entities, a contrasting representation mode on each and a threshold rule
+ * to show off. Those choices belong to the demo, and this is where the demo keeps them.
  */
 @Component
 @Profile(DemoSeedRunner.SEED_PROFILE)
@@ -65,25 +57,26 @@ class SeedBootstrap {
 
     private final UserAccountRepository accounts;
     private final CompanyRepository companies;
-    private final PermissionGrantRepository grants;
-    private final CompanyRepresentationRepository representations;
-    private final ApprovalLineTemplateRepository templates;
-    private final ApprovalTemplateStepRepository templateSteps;
+    private final UserAccountService accountService;
+    private final MasterAccountService masters;
+    private final InstallationGrants firstGrants;
+    private final CompanyRepresentationService representation;
+    private final ApprovalLineTemplateWriteService approvalLines;
     private final AuthenticationService authentication;
     private final TotpGenerator totp = new TotpGenerator();
 
     SeedBootstrap(UserAccountRepository accounts, CompanyRepository companies,
-            PermissionGrantRepository grants,
-            CompanyRepresentationRepository representations,
-            ApprovalLineTemplateRepository templates,
-            ApprovalTemplateStepRepository templateSteps,
+            UserAccountService accountService, MasterAccountService masters,
+            InstallationGrants firstGrants, CompanyRepresentationService representation,
+            ApprovalLineTemplateWriteService approvalLines,
             AuthenticationService authentication) {
         this.accounts = accounts;
         this.companies = companies;
-        this.grants = grants;
-        this.representations = representations;
-        this.templates = templates;
-        this.templateSteps = templateSteps;
+        this.accountService = accountService;
+        this.masters = masters;
+        this.firstGrants = firstGrants;
+        this.representation = representation;
+        this.approvalLines = approvalLines;
         this.authentication = authentication;
     }
 
@@ -104,27 +97,30 @@ class SeedBootstrap {
     }
 
     /**
-     * The operator account and its grants: the one place in the demo where authority comes from
-     * nowhere. Every other permission in the installation is handed out by this account through
+     * The operator account and its grants — the demo taking the same two steps the installer
+     * takes, for the same reason: on an empty installation there is nobody to ask.
+     *
+     * <p>Both steps refuse if the box is not empty, and they refuse in {@code UserAccountService}
+     * and {@code InstallationGrants} rather than here, so the demo cannot talk its way past them.
+     * Every other permission in the installation is handed out by this account through
      * {@code PermissionGrantService}, and can therefore be explained by the effective-permissions
-     * explainer down to this row.
+     * explainer down to these rows.
+     *
+     * <p>The keys are the concrete list in {@link SeedPermissions} rather than the installer's
+     * wildcards, deliberately: the demo exists to show what an explainer looks like on a real
+     * installation, and "because the operator holds hr.employee:read at ALL" is a better answer
+     * than "because the operator holds hr.*".
      */
     PermissionPrincipal bootstrapOperator() {
-        String accountId = seedId("account", DemoCompany.OPERATOR_USERNAME);
         UserAccount account = accounts.findByUsername(DemoCompany.OPERATOR_USERNAME).orElse(null);
         if (account == null) {
             // A person's account rather than a service account: master status is refused to
             // service accounts, on the grounds that a standing unattended god-key is exactly
             // what the temporary-master feature exists to avoid.
-            account = new UserAccount(accountId, DemoCompany.OPERATOR_USERNAME,
-                    DemoCompany.OPERATOR_DISPLAY_NAME, UserAccount.AccountKind.USER);
-        }
-        account.setMaster(true);
-        accounts.save(account);
-
-        List<PermissionKey> keys = SeedPermissions.operatorKeys();
-        for (PermissionKey key : keys) {
-            writeGrant(GrantSource.USER_ACCOUNT, account.id(), key, PermissionScope.ALL, true,
+            account = accountService.createFirstAccount(DemoCompany.OPERATOR_USERNAME,
+                    DemoCompany.OPERATOR_DISPLAY_NAME);
+            masters.promote(account.id());
+            firstGrants.writeFirstGrants(account.id(), SeedPermissions.operatorKeys(),
                     "데모 시드 운영 계정의 초기 권한입니다.");
         }
         // Master status does not short-circuit the evaluator in this product, so the operator
@@ -133,28 +129,30 @@ class SeedBootstrap {
     }
 
     /**
-     * Sign-in accounts for the people the demo needs to act as. The account id is derived from
-     * the username so that a second run finds the same rows instead of minting new ones.
+     * Sign-in accounts for the people the demo needs to act as, created by the operator through
+     * the same service an administrator would use — so the demo fails the day account creation
+     * grows a rule it does not satisfy.
      */
     void writeAccounts(SeedWorld world) {
+        PermissionPrincipal operator = world.operator();
         for (String employeeNumber : DemoCompany.ACCOUNT_EMPLOYEE_NUMBERS) {
             String[] person = DemoPeople.byNumber(employeeNumber);
             String username = DemoPeople.username(person);
             String displayName = person[1];
-            String accountId = seedId("account", username);
+            String employeeId = world.employeeId(employeeNumber);
+
             UserAccount account = accounts.findByUsername(username).orElse(null);
             if (account == null) {
-                account = new UserAccount(accountId, username, displayName,
-                        UserAccount.AccountKind.USER);
+                account = accountService.create(operator, username, displayName,
+                        UserAccount.AccountKind.USER, employeeId, DemoCompany.TODAY);
             }
-            account.linkToEmployee(world.employeeId(employeeNumber));
-            // 대표이사 holds master: a real installation's master account belongs to a person who
-            // can answer for it, not to a shared operator login.
-            account.setMaster(DemoCompany.MASTER_EMPLOYEE_NUMBER.equals(employeeNumber));
-            accounts.save(account);
+            if (DemoCompany.MASTER_EMPLOYEE_NUMBER.equals(employeeNumber)) {
+                // 대표이사 holds master: a real installation's master account belongs to a
+                // person who can answer for it, not to a shared operator login.
+                masters.promote(account.id());
+            }
             world.putAccount(employeeNumber, account.id(),
-                    PermissionPrincipal.user(account.id(), displayName,
-                            world.employeeId(employeeNumber)));
+                    PermissionPrincipal.user(account.id(), displayName, employeeId));
         }
     }
 
@@ -186,22 +184,14 @@ class SeedBootstrap {
      * suffices, so the contrast is visible on the same screen.
      */
     void writeRepresentation(SeedWorld world) {
-        writeRepresentation(world.companyId(DemoCompany.HQ_CODE), RepresentationMode.joint(
-                DemoCompany.HQ_REQUIRED_REPRESENTATIVE_APPROVALS,
-                DemoCompany.HQ_DESIGNATED_REPRESENTATIVES));
-        writeRepresentation(world.companyId(DemoCompany.SUBSIDIARY_CODE),
-                RepresentationMode.several(DemoCompany.SUBSIDIARY_DESIGNATED_REPRESENTATIVES));
-    }
-
-    private void writeRepresentation(String companyId, RepresentationMode mode) {
-        List<CompanyRepresentationEntity> existing =
-                representations.findByCompanyIdOrderByEffectiveFromDesc(companyId);
-        if (!existing.isEmpty()) {
-            return;
-        }
-        representations.save(new CompanyRepresentationEntity(
-                seedId("representation", companyId), companyId, mode,
-                DemoCompany.REPRESENTATION_EFFECTIVE_FROM, null));
+        PermissionPrincipal operator = world.operator();
+        representation.adopt(operator, world.companyId(DemoCompany.HQ_CODE),
+                RepresentationMode.joint(DemoCompany.HQ_REQUIRED_REPRESENTATIVE_APPROVALS,
+                        DemoCompany.HQ_DESIGNATED_REPRESENTATIVES),
+                DemoCompany.REPRESENTATION_EFFECTIVE_FROM);
+        representation.adopt(operator, world.companyId(DemoCompany.SUBSIDIARY_CODE),
+                RepresentationMode.several(DemoCompany.SUBSIDIARY_DESIGNATED_REPRESENTATIVES),
+                DemoCompany.REPRESENTATION_EFFECTIVE_FROM);
     }
 
     /**
@@ -216,115 +206,54 @@ class SeedBootstrap {
         String hq = world.companyId(DemoCompany.HQ_CODE);
         String subsidiary = world.companyId(DemoCompany.SUBSIDIARY_CODE);
 
-        List<Step> expense = new ArrayList<Step>();
-        expense.add(Step.base(1, ApprovalStepKind.REVIEW,
-                RoleExpression.rank("BUJANG", RoleExpression.Domain.DRAFTER_UNIT), false));
-        expense.add(Step.base(2, ApprovalStepKind.APPROVE,
-                RoleExpression.rank("ISA", RoleExpression.Domain.DRAFTER_UNIT_PARENT), false));
-        expense.add(Step.base(3, ApprovalStepKind.CC,
-                RoleExpression.rank("GWAJANG", RoleExpression.Domain.DRAFTER_UNIT), true));
-        expense.add(Step.threshold(4, ApprovalStepKind.APPROVE, RoleExpression.representative(),
-                new BigDecimal("5000000"),
+        List<StepDefinition> expense = new ArrayList<StepDefinition>();
+        expense.add(StepDefinition.base(1, ApprovalStepKind.REVIEW,
+                RoleExpression.rank("BUJANG", RoleExpression.Domain.DRAFTER_UNIT)));
+        expense.add(StepDefinition.base(2, ApprovalStepKind.APPROVE,
+                RoleExpression.rank("ISA", RoleExpression.Domain.DRAFTER_UNIT_PARENT)));
+        expense.add(new StepDefinition(3, ApprovalStepKind.CC,
+                RoleExpression.rank("GWAJANG", RoleExpression.Domain.DRAFTER_UNIT), true, null,
+                null));
+        expense.add(StepDefinition.above(new BigDecimal("5000000"), 4, ApprovalStepKind.APPROVE,
+                RoleExpression.representative(),
                 "5,000,000원을 넘는 지출은 공동대표 승인을 받습니다."));
-        write(hq, DemoCompany.DOC_TYPE_EXPENSE, "지출결의서 기본 결재선", expense);
+        write(world, hq, DemoCompany.DOC_TYPE_EXPENSE, "지출결의서 기본 결재선", expense);
 
-        List<Step> purchase = new ArrayList<Step>();
-        purchase.add(Step.base(1, ApprovalStepKind.REVIEW,
-                RoleExpression.rank("BUJANG", RoleExpression.Domain.DRAFTER_UNIT), false));
-        purchase.add(Step.base(2, ApprovalStepKind.APPROVE,
-                RoleExpression.rank("ISA", RoleExpression.Domain.DRAFTER_UNIT_PARENT), false));
-        purchase.add(Step.base(3, ApprovalStepKind.CC,
-                RoleExpression.jobFunction("ACCOUNTING", RoleExpression.Domain.COMPANY), true));
-        write(hq, DemoCompany.DOC_TYPE_PURCHASE, "구매품의서 기본 결재선", purchase);
+        List<StepDefinition> purchase = new ArrayList<StepDefinition>();
+        purchase.add(StepDefinition.base(1, ApprovalStepKind.REVIEW,
+                RoleExpression.rank("BUJANG", RoleExpression.Domain.DRAFTER_UNIT)));
+        purchase.add(StepDefinition.base(2, ApprovalStepKind.APPROVE,
+                RoleExpression.rank("ISA", RoleExpression.Domain.DRAFTER_UNIT_PARENT)));
+        purchase.add(new StepDefinition(3, ApprovalStepKind.CC,
+                RoleExpression.jobFunction("ACCOUNTING", RoleExpression.Domain.COMPANY), true,
+                null, null));
+        write(world, hq, DemoCompany.DOC_TYPE_PURCHASE, "구매품의서 기본 결재선", purchase);
 
-        List<Step> leave = new ArrayList<Step>();
-        leave.add(Step.base(1, ApprovalStepKind.REVIEW,
-                RoleExpression.rank("BUJANG", RoleExpression.Domain.DRAFTER_UNIT), false));
-        leave.add(Step.base(2, ApprovalStepKind.APPROVE,
-                RoleExpression.jobFunction("HR", RoleExpression.Domain.COMPANY), false));
-        write(hq, ApprovalWiring.LeaveRequestFields.DOCUMENT_TYPE, "휴가신청서 결재선", leave);
+        List<StepDefinition> leave = new ArrayList<StepDefinition>();
+        leave.add(StepDefinition.base(1, ApprovalStepKind.REVIEW,
+                RoleExpression.rank("BUJANG", RoleExpression.Domain.DRAFTER_UNIT)));
+        leave.add(StepDefinition.base(2, ApprovalStepKind.APPROVE,
+                RoleExpression.jobFunction("HR", RoleExpression.Domain.COMPANY)));
+        write(world, hq, ApprovalWiring.LeaveRequestFields.DOCUMENT_TYPE, "휴가신청서 결재선", leave);
 
-        List<Step> rules = new ArrayList<Step>();
-        rules.add(Step.base(1, ApprovalStepKind.REVIEW,
-                RoleExpression.jobFunction("HR", RoleExpression.Domain.COMPANY), false));
-        rules.add(Step.base(2, ApprovalStepKind.APPROVE, RoleExpression.representative(), false));
-        write(hq, EmploymentRulesService.DOCUMENT_TYPE, "취업규칙 개정 결재선", rules);
+        List<StepDefinition> rules = new ArrayList<StepDefinition>();
+        rules.add(StepDefinition.base(1, ApprovalStepKind.REVIEW,
+                RoleExpression.jobFunction("HR", RoleExpression.Domain.COMPANY)));
+        rules.add(StepDefinition.base(2, ApprovalStepKind.APPROVE,
+                RoleExpression.representative()));
+        write(world, hq, EmploymentRulesService.DOCUMENT_TYPE, "취업규칙 개정 결재선", rules);
 
         // 자회사 is 각자대표, so the same shape of line needs only one signature to complete.
-        List<Step> subsidiaryExpense = new ArrayList<Step>();
-        subsidiaryExpense.add(Step.base(1, ApprovalStepKind.APPROVE,
-                RoleExpression.representative(), false));
-        write(subsidiary, DemoCompany.DOC_TYPE_EXPENSE, "지출결의서 결재선", subsidiaryExpense);
+        List<StepDefinition> subsidiaryExpense = new ArrayList<StepDefinition>();
+        subsidiaryExpense.add(StepDefinition.base(1, ApprovalStepKind.APPROVE,
+                RoleExpression.representative()));
+        write(world, subsidiary, DemoCompany.DOC_TYPE_EXPENSE, "지출결의서 결재선",
+                subsidiaryExpense);
     }
 
-    private void write(String companyId, String documentType, String nameKo, List<Step> steps) {
-        String templateId = seedId("template", companyId + ":" + documentType);
-        if (templates.findById(templateId).isPresent()) {
-            return;
-        }
-        templates.save(new ApprovalLineTemplateEntity(templateId, companyId, documentType, null,
-                nameKo));
-        for (Step step : steps) {
-            templateSteps.save(new ApprovalTemplateStepEntity(
-                    seedId("template-step", templateId + ":" + step.position), templateId,
-                    step.position, step.kind, step.role.toString(), step.optional,
-                    step.minimumAmount, step.rationale));
-        }
-    }
-
-    private void writeGrant(GrantSource source, String sourceId, PermissionKey key,
-            PermissionScope scope, boolean allow, String reason) {
-        List<PermissionGrantRow> existing = grants.findBySourceAndSourceId(source, sourceId);
-        for (PermissionGrantRow row : existing) {
-            if (row.key().equals(key) && row.scope() == scope && row.isAllow() && !row.isRevoked()) {
-                return;
-            }
-        }
-        PermissionGrantRow row = new PermissionGrantRow(UUID.randomUUID().toString(), source,
-                sourceId, key, scope, allow);
-        row.setGrantedBy(sourceId);
-        row.setReason(reason);
-        grants.save(row);
-    }
-
-    /**
-     * A stable id for a row the seed owns. Ids are UUID strings generated in Java, and naming
-     * them after what they describe means a second run recognises its own work rather than
-     * creating a second copy of it.
-     */
-    static String seedId(String kind, String name) {
-        return UUID.nameUUIDFromBytes(("coreintra-seed:" + kind + ":" + name)
-                .getBytes(StandardCharsets.UTF_8)).toString();
-    }
-
-    /** One row of an approval line template, before it has a template to belong to. */
-    private static final class Step {
-
-        private final int position;
-        private final ApprovalStepKind kind;
-        private final RoleExpression role;
-        private final boolean optional;
-        private final BigDecimal minimumAmount;
-        private final String rationale;
-
-        private Step(int position, ApprovalStepKind kind, RoleExpression role, boolean optional,
-                BigDecimal minimumAmount, String rationale) {
-            this.position = position;
-            this.kind = kind;
-            this.role = role;
-            this.optional = optional;
-            this.minimumAmount = minimumAmount;
-            this.rationale = rationale;
-        }
-
-        static Step base(int position, ApprovalStepKind kind, RoleExpression role,
-                boolean optional) {
-            return new Step(position, kind, role, optional, null, null);
-        }
-
-        static Step threshold(int position, ApprovalStepKind kind, RoleExpression role,
-                BigDecimal minimumAmount, String rationale) {
-            return new Step(position, kind, role, false, minimumAmount, rationale);
-        }
+    private void write(SeedWorld world, String companyId, String documentType, String nameKo,
+            List<StepDefinition> steps) {
+        approvalLines.define(world.operator(), companyId, documentType, null, nameKo, null, steps,
+                DemoCompany.TODAY);
     }
 }

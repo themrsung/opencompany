@@ -192,7 +192,7 @@ public class CompanyRepresentationService {
                     "이미 " + newest.effectiveFrom() + "부터 적용 중인 대표 형태가 있어 "
                             + effectiveFrom + " 부터의 변경은 소급 적용이 됩니다. 변경 시행일을 "
                             + newest.effectiveFrom().plusDays(1) + " 이후로 지정해 주십시오. "
-                            + "(An arrangement已 in force from " + newest.effectiveFrom()
+                            + "(An arrangement already in force from " + newest.effectiveFrom()
                             + " cannot be superseded from " + effectiveFrom + ": documents routed "
                             + "under it would be re-routed after the fact. Choose a date after "
                             + newest.effectiveFrom() + ".)");

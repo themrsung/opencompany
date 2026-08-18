@@ -111,7 +111,7 @@ public class TemporaryMasterController {
         }
     }
 
-    public static class IssueRequest {
+    public static class TemporaryMasterIssueRequest {
         @NotBlank
         private String companyId;
         @NotBlank
@@ -139,7 +139,7 @@ public class TemporaryMasterController {
         private String representationMode;
         private int requiredApprovals;
         @NotEmpty(message = "A support session needs the representative approval that authorised it.")
-        private List<Approver> approvedBy;
+        private List<TemporaryMasterApproverRequest> approvedBy;
 
         public String getCompanyId() {
             return companyId;
@@ -237,16 +237,16 @@ public class TemporaryMasterController {
             this.requiredApprovals = value;
         }
 
-        public List<Approver> getApprovedBy() {
+        public List<TemporaryMasterApproverRequest> getApprovedBy() {
             return approvedBy;
         }
 
-        public void setApprovedBy(List<Approver> value) {
+        public void setApprovedBy(List<TemporaryMasterApproverRequest> value) {
             this.approvedBy = value;
         }
     }
 
-    public static class Approver {
+    public static class TemporaryMasterApproverRequest {
         @NotBlank
         private String accountId;
         @NotBlank
@@ -310,7 +310,7 @@ public class TemporaryMasterController {
     @Operation(summary = "Issue a support session",
             description = "Requires a master account, the issue permission, representative "
                     + "approval under the company's mode, and the company name typed by hand.")
-    public ResponseEntity<IssuedSession> issue(@Valid @RequestBody IssueRequest body) {
+    public ResponseEntity<IssuedSession> issue(@Valid @RequestBody TemporaryMasterIssueRequest body) {
         PermissionPrincipal principal = current.require();
         LocalDate today = LocalDate.now();
 
@@ -373,7 +373,7 @@ public class TemporaryMasterController {
         for (String capability : capabilities) {
             issuance.capability(capability);
         }
-        for (Approver approver : body.getApprovedBy()) {
+        for (TemporaryMasterApproverRequest approver : body.getApprovedBy()) {
             issuance.approvedBy(approver.getAccountId(), approver.getName());
         }
 

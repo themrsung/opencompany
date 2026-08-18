@@ -1,0 +1,198 @@
+/*
+ * 결재 screens.
+ *
+ * Local to this area rather than added to `components.css`: nothing here is a
+ * reusable primitive, and the shared stylesheet belongs to the UI package.
+ * Everything is expressed in the design tokens, so a change to the palette
+ * still reaches these screens.
+ */
+
+.inbox-shortcuts {
+  margin: 0 0 var(--ci-space-3);
+  font-size: var(--ci-text-sm);
+  color: var(--ci-fg-muted);
+}
+
+.inbox-chips {
+  display: flex;
+  gap: var(--ci-space-4);
+  margin: 0 0 var(--ci-space-3);
+  font-size: var(--ci-text-sm);
+  color: var(--ci-fg-muted);
+}
+
+.inbox-company {
+  min-width: 200px;
+}
+
+.inbox-tabs {
+  display: flex;
+  gap: var(--ci-space-1);
+  margin-bottom: var(--ci-space-2);
+}
+
+.inbox-tab {
+  height: var(--ci-control-height);
+  padding: 0 var(--ci-space-3);
+  font: inherit;
+  color: var(--ci-fg-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--ci-radius);
+  cursor: pointer;
+}
+
+.inbox-tab:hover {
+  background: var(--ci-bg-subtle);
+}
+
+.inbox-tab--current {
+  color: var(--ci-accent);
+  background: var(--ci-accent-subtle);
+  border-color: var(--ci-accent);
+  font-weight: 600;
+}
+
+.inbox-tab__count {
+  margin-left: var(--ci-space-1);
+}
+
+/*
+ * The cursor row.
+ *
+ * A background alone would be invisible to somebody who cannot distinguish it,
+ * so the row also carries a rule down its leading edge. Both are needed: the
+ * rule survives a high-contrast mode that drops backgrounds, the background
+ * survives a narrow column that clips the rule.
+ */
+.inbox-row--cursor {
+  background: var(--ci-accent-subtle);
+  box-shadow: inset 3px 0 0 0 var(--ci-accent);
+}
+
+.inbox-row:focus-visible {
+  outline: var(--ci-focus-ring);
+  outline-offset: -2px;
+}
+
+.inbox-row__actions {
+  display: flex;
+  gap: var(--ci-space-1);
+  align-items: center;
+  height: var(--ci-row-height);
+}
+
+.inbox-return {
+  margin-top: var(--ci-space-4);
+  padding: var(--ci-space-4);
+}
+
+.inbox-return__title {
+  margin: 0 0 var(--ci-space-3);
+  font-size: var(--ci-text-lg);
+}
+
+.inbox-return__actions {
+  display: flex;
+  gap: var(--ci-space-2);
+  margin-top: var(--ci-space-3);
+}
+
+.inbox-violations {
+  margin: 0;
+  padding-left: var(--ci-space-4);
+}
+
+.approval-state {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.approval-state__note {
+  font-size: var(--ci-text-xs);
+  color: var(--ci-fg-muted);
+}
+
+/* The UI package has no muted-text utility; area-local, like the accounting screens' own. */
+.appr-muted {
+  color: var(--ci-fg-muted);
+}
+
+.document-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--ci-space-3);
+  margin: 0 0 var(--ci-space-3);
+  padding: var(--ci-space-4);
+}
+
+.document-fields dt {
+  font-size: var(--ci-text-xs);
+  color: var(--ci-fg-muted);
+}
+
+.document-fields dd {
+  margin: 2px 0 0;
+}
+
+.document-note {
+  margin: 0 0 var(--ci-space-4);
+  font-size: var(--ci-text-sm);
+}
+
+.document-section {
+  margin-bottom: var(--ci-space-4);
+}
+
+.document-section__title {
+  margin: 0;
+  padding: var(--ci-space-3) var(--ci-space-3) 0;
+  font-size: var(--ci-text-lg);
+}
+
+.document-approvers {
+  margin: 0;
+  padding-left: var(--ci-space-4);
+}
+
+.document-hash {
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--ci-font-mono);
+}
+
+.document-decisions {
+  padding: var(--ci-space-4);
+}
+
+.document-decisions__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ci-space-2);
+}
+
+.document-decisions__reason {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--ci-space-2);
+  margin-top: var(--ci-space-3);
+}
+
+.inbox-row__open {
+  color: inherit;
+  text-decoration: none;
+}
+
+.inbox-row__open:hover,
+.inbox-row--cursor .inbox-row__open {
+  color: var(--ci-accent);
+  text-decoration: underline;
+}
+
+.inbox-loading {
+  padding: var(--ci-space-6);
+  text-align: center;
+}

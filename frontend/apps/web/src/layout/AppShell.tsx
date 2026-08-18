@@ -46,31 +46,42 @@ export function AppShell({
 
   return (
     <div className={`app-shell${viewerIsTemporaryMaster ? ' app-shell--support' : ''}`}>
-      {viewerIsTemporaryMaster ? (
-        <div className="app-support-strip app-shell__banner" role="note">
-          {t('temporaryMaster.title')}
-        </div>
-      ) : null}
+      {/*
+       * One grid child, however many strips are inside it. Two siblings each
+       * spanning `1 / -1` do not stack: the second is auto-placed into the row
+       * the sidebar already occupies and ends up below the page. A temporary
+       * master looking at their own session sees both of these at once, which
+       * is exactly the moment the layout must not break.
+       */}
+      {viewerIsTemporaryMaster || supportSession !== undefined ? (
+        <div className="app-shell__banner">
+          {viewerIsTemporaryMaster ? (
+            <div className="app-support-strip" role="note">
+              {t('temporaryMaster.title')}
+            </div>
+          ) : null}
 
-      {supportSession ? (
-        <div className="app-shell__banner" style={{ padding: 'var(--ci-space-2)' }}>
-          <Banner
-            tone="support"
-            title={t('temporaryMaster.live')}
-            actions={
-              supportSession.canRevoke ? (
-                <Button tone="danger" onClick={supportSession.onRevoke}>
-                  {t('action.revokeNow')}
-                </Button>
-              ) : undefined
-            }
-          >
-            {t('temporaryMaster.banner', {
-              name: supportSession.engineerName,
-              capabilities: supportSession.capabilities.join(', '),
-              expires: supportSession.expiresAt,
-            })}
-          </Banner>
+          {supportSession ? (
+            <div style={{ padding: 'var(--ci-space-2)' }}>
+              <Banner
+                tone="support"
+                title={t('temporaryMaster.live')}
+                actions={
+                  supportSession.canRevoke ? (
+                    <Button tone="danger" onClick={supportSession.onRevoke}>
+                      {t('action.revokeNow')}
+                    </Button>
+                  ) : undefined
+                }
+              >
+                {t('temporaryMaster.banner', {
+                  name: supportSession.engineerName,
+                  capabilities: supportSession.capabilities.join(', '),
+                  expires: supportSession.expiresAt,
+                })}
+              </Banner>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

@@ -66,9 +66,30 @@ public class DanglingSchemaCompleter implements OpenApiCustomiser {
     private static final String REF_PREFIX = "#/components/schemas/";
 
     private final ObjectProvider<RequestMappingHandlerMapping> handlerMappings;
+    private final ObjectProvider<io.swagger.v3.core.converter.ModelConverter> customConverters;
 
-    public DanglingSchemaCompleter(ObjectProvider<RequestMappingHandlerMapping> handlerMappings) {
+    public DanglingSchemaCompleter(ObjectProvider<RequestMappingHandlerMapping> handlerMappings,
+            ObjectProvider<io.swagger.v3.core.converter.ModelConverter> customConverters) {
         this.handlerMappings = handlerMappings;
+        this.customConverters = customConverters;
+    }
+
+    /**
+     * A converter chain that is fresh but not naive.
+     *
+     * <p>Fresh, because the shared singleton returns a bare {@code $ref} for
+     * anything springdoc has already seen — which is the hole being filled. Not
+     * naive, because a clean instance also loses this application's own
+     * converters, and the first symptom of that was {@code BusinessInstant}
+     * being defined here as an object with a stray boolean on it, silently
+     * undoing the converter that types it as a string.
+     */
+    private ModelConverters freshConverters() {
+        ModelConverters converters = new ModelConverters();
+        for (io.swagger.v3.core.converter.ModelConverter converter : customConverters) {
+            converters.addConverter(converter);
+        }
+        return converters;
     }
 
     @Override
@@ -102,8 +123,7 @@ public class DanglingSchemaCompleter implements OpenApiCustomiser {
                 if (type == null) {
                     continue;
                 }
-                Map<String, Schema> resolved =
-                        new ModelConverters().readAll(new AnnotatedType(type));
+                Map<String, Schema> resolved = freshConverters().readAll(new AnnotatedType(type));
                 for (Map.Entry<String, Schema> entry : resolved.entrySet()) {
                     if (!openApi.getComponents().getSchemas().containsKey(entry.getKey())) {
                         openApi.getComponents().addSchemas(entry.getKey(), entry.getValue());
@@ -128,7 +148,7 @@ public class DanglingSchemaCompleter implements OpenApiCustomiser {
                     continue;
                 }
                 for (Map.Entry<String, Schema> entry
-                        : new ModelConverters().readAll(new AnnotatedType(type)).entrySet()) {
+                        : freshConverters().readAll(new AnnotatedType(type)).entrySet()) {
                     if (!openApi.getComponents().getSchemas().containsKey(entry.getKey())) {
                         openApi.getComponents().addSchemas(entry.getKey(), entry.getValue());
                     }
@@ -354,7 +374,7 @@ public class DanglingSchemaCompleter implements OpenApiCustomiser {
         return unique;
     }
 
-    private static void readInto(Map<String, Schema> into, Type type) {
+    private void readInto(Map<String, Schema> into, Type type) {
         if (type == null) {
             return;
         }
@@ -364,7 +384,7 @@ public class DanglingSchemaCompleter implements OpenApiCustomiser {
             // it has already seen comes back as a bare $ref with no definition
             // — which is the very hole being filled. A clean instance walks the
             // whole graph and emits every schema in it.
-            Map<String, Schema> resolved = new ModelConverters().readAll(new AnnotatedType(type));
+            Map<String, Schema> resolved = freshConverters().readAll(new AnnotatedType(type));
             for (Map.Entry<String, Schema> entry : resolved.entrySet()) {
                 into.putIfAbsent(entry.getKey(), entry.getValue());
             }

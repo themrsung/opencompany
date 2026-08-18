@@ -251,17 +251,6 @@ public class UserAccountService {
         return accounts.save(account);
     }
 
-    @Transactional(readOnly = true)
-    public Optional<UserAccount> findByUsername(String username) {
-        return accounts.findByUsername(Texts.strip(username == null ? "" : username));
-    }
-
-    /** True while {@link #createFirstAccount} is still open. */
-    @Transactional(readOnly = true)
-    public boolean hasNoAccounts() {
-        return accounts.count() == 0;
-    }
-
     private UserAccount authoriseUpdate(PermissionPrincipal caller, String accountId,
             LocalDate businessDate, String what) {
         requireCaller(caller, businessDate);

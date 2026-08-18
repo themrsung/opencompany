@@ -25,7 +25,16 @@ export const inboxKo = {
   openDocument: '문서 열기',
   returnReasonLabel: '반려 사유',
   returnReasonPlaceholder: '무엇을 고쳐야 하는지 적어 주십시오',
-  shortcutHint: 'J/K 로 이동, Enter 로 열기, A 로 승인합니다',
+  shortcutHint: 'J/K 로 이동, Enter 로 열기, A 로 승인, R 로 반려합니다',
+  columnState: '상태',
+  columnWaiting: '경과',
+  columnActions: '처리',
+  stepPending: '단계 확인 중',
+  drafterPending: '문서를 열면 기안자를 확인할 수 있습니다',
+  truncated: '{{count}}건 가운데 일부만 표시하고 있습니다',
+  inProgressByMe: '진행 중인 내 문서',
+  returnedToMe: '반려되어 돌아온 문서',
+  returnHint: '사유를 적어야 반려할 수 있습니다. 사유는 그대로 기안자에게 전달됩니다',
 } as const;
 
 export const inboxEn: Translated<typeof inboxKo> = {
@@ -48,5 +57,14 @@ export const inboxEn: Translated<typeof inboxKo> = {
   openDocument: 'Open',
   returnReasonLabel: 'Reason for returning',
   returnReasonPlaceholder: 'Say what needs to change',
-  shortcutHint: 'J/K to move, Enter to open, A to approve',
+  shortcutHint: 'J/K to move, Enter to open, A to approve, R to return',
+  columnState: 'State',
+  columnWaiting: 'Waiting',
+  columnActions: 'Act',
+  stepPending: 'Checking the step',
+  drafterPending: 'Open the document to see who drafted it',
+  truncated: 'Showing part of {{count}} documents',
+  inProgressByMe: 'Mine in progress',
+  returnedToMe: 'Returned to me',
+  returnHint: 'A reason is required, and it reaches the drafter as written',
 };

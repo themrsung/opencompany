@@ -708,7 +708,7 @@ export interface paths {
          * Install a module
          * @description Master only, audited, and refused if the manifest asks for a permission the installing master did not approve.
          */
-        post: operations["install_1"];
+        post: operations["install_2"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1771,7 +1771,7 @@ export interface paths {
          * Install a client font
          * @description Requires documents.font:install. The upload must carry licenceAcknowledged=true, the current acknowledgement version, and the acknowledgement text echoed back exactly; any of the three missing is a refusal, because an acknowledgement that can be omitted is not one. Who agreed, when, and the exact wording are recorded on the font row.
          */
-        post: operations["install"];
+        post: operations["install_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1916,6 +1916,30 @@ export interface paths {
         get: operations["removalImpact"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Is this installation still empty?
+         * @description True only while POST /api/v1/install would succeed.
+         */
+        get: operations["availability"];
+        put?: never;
+        /**
+         * Open an empty installation
+         * @description Unauthenticated by necessity and available only while the database holds no installation row, no account and no company. The TOTP secret and the recovery codes in the response are the only copies that will exist.
+         */
+        post: operations["install"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3253,10 +3277,6 @@ export interface components {
             /** @description The 직급 held at submission, e.g. 부장. */
             rankLabel?: string;
         };
-        Approver: {
-            accountId: string;
-            name: string;
-        };
         AssignRequest: {
             /** Format: date */
             effectiveFrom: string;
@@ -3407,9 +3427,6 @@ export interface components {
             name?: string;
             retired?: boolean;
         };
-        BusinessInstant: {
-            outsideCalendarDay?: boolean;
-        };
         Capability: {
             description?: string;
             key?: string;
@@ -3485,7 +3502,11 @@ export interface components {
             reason?: string;
         };
         CorrectEntryRequest: {
-            at?: components["schemas"]["BusinessInstant"];
+            /**
+             * @description A business instant: YYYY-MM-DDT[-]HH:MM:SS.mmm, with no timezone and no trailing Z — a Z is rejected. The clock face runs from -24:00:00 to +48:00:00, so a shift ending at three in the morning is 27:00 on the business day it began. Ordering is by business date first and offset second; never sort these strings lexically, because '-' sorts below every digit.
+             * @example 2026-08-30T27:00:00.000
+             */
+            at?: string;
             description?: string;
             postings: components["schemas"]["PostingRequest"][];
             reason: string;
@@ -3860,7 +3881,11 @@ export interface components {
             bookId?: string;
             description?: string;
             id?: string;
-            postedAt?: components["schemas"]["BusinessInstant"];
+            /**
+             * @description A business instant: YYYY-MM-DDT[-]HH:MM:SS.mmm, with no timezone and no trailing Z — a Z is rejected. The clock face runs from -24:00:00 to +48:00:00, so a shift ending at three in the morning is 27:00 on the business day it began. Ordering is by business date first and offset second; never sort these strings lexically, because '-' sorts below every digit.
+             * @example 2026-08-30T27:00:00.000
+             */
+            postedAt?: string;
             postings?: components["schemas"]["PostingResponse"][];
             reportable?: boolean;
             revisions?: components["schemas"]["RevisionResponse"][];
@@ -4031,6 +4056,86 @@ export interface components {
             vendor?: string;
             version: string;
         };
+        /** @description Whether this installation is still empty and can be opened. */
+        InstallationAvailabilityView: {
+            /** @description True only while POST /api/v1/install would succeed. */
+            available?: boolean;
+        };
+        /** @description The first company and the first master account. */
+        InstallationRequest: {
+            /**
+             * @description The book's base currency, used only when accounting is on.
+             * @example KRW
+             */
+            baseCurrencyCode?: string;
+            /**
+             * @description 사업자등록번호
+             * @example 220-81-45678
+             */
+            businessRegistrationNumber?: string;
+            /**
+             * @description Short stable code for the company, e.g. HANBIT
+             * @example HANBIT
+             */
+            companyCode: string;
+            /** @example Hanbit Industries Co., Ltd. */
+            companyNameEn?: string;
+            /** @example 한빛산업 주식회사 */
+            companyNameKo: string;
+            /**
+             * Format: int32
+             * @description How many 대표이사 the company has designated.
+             * @example 1
+             */
+            designatedRepresentatives?: number;
+            /**
+             * Format: date
+             * @description 설립일
+             * @example 2018-03-02
+             */
+            establishedOn?: string;
+            /** @example 김서연 */
+            masterDisplayName: string;
+            /**
+             * @description How the first master signs in. There is no password.
+             * @example daepyo
+             */
+            masterUsername: string;
+            /**
+             * @description SEVERAL (각자대표) or JOINT (공동대표)
+             * @example SEVERAL
+             * @enum {string}
+             */
+            representationMode?: "SEVERAL" | "JOINT";
+            /**
+             * Format: int32
+             * @description How many 대표 signatures a representative step needs. Must be at least 2 under JOINT.
+             * @example 1
+             */
+            requiredApprovals?: number;
+        };
+        /** @description The opened installation. The credentials are shown exactly once. */
+        InstallationResultView: {
+            /** @description Document types that now have a company-wide 결재선. */
+            approvalLineDocumentTypes?: string[];
+            /** @description The grants the first master holds, as resource:action@scope. They are wildcards because the grant service refuses to hand out a permission the grantor does not hold; they cannot be re-granted, and they can be revoked. */
+            bootstrapPermissions?: string[];
+            companyCode?: string;
+            companyId?: string;
+            /**
+             * Format: int32
+             * @description Rows of factory catalogue written for the new company: the 직급 ladder, the 직무 set, the attendance statuses and the 연차 policy.
+             */
+            defaultRowsWritten?: number;
+            masterAccountId?: string;
+            masterUsername?: string;
+            /** @description Render as the QR code. Contains the secret: never log it. Shown once. */
+            otpauthUri?: string;
+            /** @description Single-use recovery codes, in plaintext. Only hashes are stored, so this is the only time they can be read. Shown once. */
+            recoveryCodes?: string[];
+            /** @description The TOTP secret, grouped in fours for manual entry. Shown once. */
+            secretBase32?: string;
+        };
         InstalledFontView: {
             blobSha256?: string;
             embeddingPermission?: string;
@@ -4067,21 +4172,10 @@ export interface components {
             number?: number;
         };
         IssueRequest: {
-            accountId: string;
-            approvalDocumentId: string;
-            approvedBy: components["schemas"]["Approver"][];
-            capabilities?: string[];
-            companyId: string;
-            companyName: string;
-            engineerName: string;
-            /** Format: int32 */
-            hours?: number;
-            reason: string;
-            representationMode: string;
-            /** Format: int32 */
-            requiredApprovals?: number;
-            ticketReference?: string;
-            typedCompanyName: string;
+            /** Format: date-time */
+            expiresAt?: string;
+            name: string;
+            scopes?: string[];
         };
         IssuedApiKey: {
             key?: components["schemas"]["ApiKeyView"];
@@ -4228,7 +4322,11 @@ export interface components {
         };
         PendingEntryResponse: {
             description?: string;
-            postedAt?: components["schemas"]["BusinessInstant"];
+            /**
+             * @description A business instant: YYYY-MM-DDT[-]HH:MM:SS.mmm, with no timezone and no trailing Z — a Z is rejected. The clock face runs from -24:00:00 to +48:00:00, so a shift ending at three in the morning is 27:00 on the business day it began. Ordering is by business date first and offset second; never sort these strings lexically, because '-' sorts below every digit.
+             * @example 2026-08-30T27:00:00.000
+             */
+            postedAt?: string;
             postings?: components["schemas"]["PostingResponse"][];
         };
         PositionView: {
@@ -4245,7 +4343,11 @@ export interface components {
             clientId?: string;
             description: string;
             draft?: boolean;
-            postedAt?: components["schemas"]["BusinessInstant"];
+            /**
+             * @description A business instant: YYYY-MM-DDT[-]HH:MM:SS.mmm, with no timezone and no trailing Z — a Z is rejected. The clock face runs from -24:00:00 to +48:00:00, so a shift ending at three in the morning is 27:00 on the business day it began. Ordering is by business date first and offset second; never sort these strings lexically, because '-' sorts below every digit.
+             * @example 2026-08-30T27:00:00.000
+             */
+            postedAt?: string;
             postings: components["schemas"]["PostingRequest"][];
         };
         PostingRequest: {
@@ -4321,6 +4423,18 @@ export interface components {
             /** Format: int32 */
             roundingDigits?: number;
             total?: string;
+        };
+        ProblemDetail: {
+            code?: string;
+            detail?: string;
+            extensions?: {
+                [key: string]: unknown;
+            };
+            /** Format: int32 */
+            status?: number;
+            title?: string;
+            type?: string;
+            violations?: components["schemas"]["Violation"][];
         };
         PromotionRequest: {
             accountId: string;
@@ -4423,7 +4537,11 @@ export interface components {
         };
         RevisionResponse: {
             actorAccountId?: string;
-            at?: components["schemas"]["BusinessInstant"];
+            /**
+             * @description A business instant: YYYY-MM-DDT[-]HH:MM:SS.mmm, with no timezone and no trailing Z — a Z is rejected. The clock face runs from -24:00:00 to +48:00:00, so a shift ending at three in the morning is 27:00 on the business day it began. Ordering is by business date first and offset second; never sort these strings lexically, because '-' sorts below every digit.
+             * @example 2026-08-30T27:00:00.000
+             */
+            at?: string;
             kind?: string;
             /** Format: int32 */
             number?: number;
@@ -4528,6 +4646,27 @@ export interface components {
             nameKo?: string;
             retiredAt?: string;
         };
+        TemporaryMasterApproverRequest: {
+            accountId: string;
+            name: string;
+        };
+        TemporaryMasterIssueRequest: {
+            accountId: string;
+            approvalDocumentId: string;
+            approvedBy: components["schemas"]["TemporaryMasterApproverRequest"][];
+            capabilities?: string[];
+            companyId: string;
+            companyName: string;
+            engineerName: string;
+            /** Format: int32 */
+            hours?: number;
+            reason: string;
+            representationMode: string;
+            /** Format: int32 */
+            requiredApprovals?: number;
+            ticketReference?: string;
+            typedCompanyName: string;
+        };
         TemporaryMasterSessionReport: unknown;
         TerminationRequest: {
             /** Format: date */
@@ -4578,8 +4717,17 @@ export interface components {
             /** Format: int32 */
             toVersion?: number;
         };
+        Violation: {
+            code?: string;
+            field?: string;
+            message?: string;
+        };
         VoidRequest: {
-            at?: components["schemas"]["BusinessInstant"];
+            /**
+             * @description A business instant: YYYY-MM-DDT[-]HH:MM:SS.mmm, with no timezone and no trailing Z — a Z is rejected. The clock face runs from -24:00:00 to +48:00:00, so a shift ending at three in the morning is 27:00 on the business day it began. Ordering is by business date first and offset second; never sort these strings lexically, because '-' sorts below every digit.
+             * @example 2026-08-30T27:00:00.000
+             */
+            at?: string;
             reason: string;
         };
         VoidedBatchResponse: {
@@ -5780,7 +5928,7 @@ export interface operations {
             };
         };
     };
-    install_1: {
+    install_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -7379,7 +7527,7 @@ export interface operations {
             };
         };
     };
-    install: {
+    install_1: {
         parameters: {
             query: {
                 companyId: string;
@@ -7605,6 +7753,68 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["RemovalImpactView"];
+                };
+            };
+        };
+    };
+    availability: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["InstallationAvailabilityView"];
+                };
+            };
+        };
+    };
+    install: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstallationRequest"];
+            };
+        };
+        responses: {
+            /** @description Installed. The credentials are shown once. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["InstallationResultView"];
+                };
+            };
+            /** @description The database is not empty, so this box is not ours to open. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Already installed. The endpoint is gone and does not come back. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProblemDetail"];
                 };
             };
         };
@@ -8835,7 +9045,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["IssueRequest"];
+                "application/json": components["schemas"]["TemporaryMasterIssueRequest"];
             };
         };
         responses: {

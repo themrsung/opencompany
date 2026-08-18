@@ -1,13 +1,22 @@
-import { createRootRoute, createRoute, createRouter, type AnyRoute } from '@tanstack/react-router';
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  useRouterState,
+  type AnyRoute,
+} from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
-import { AppShell, Page } from './layout/AppShell.js';
-import { NAVIGATION } from './navigation.js';
+import { Page } from './layout/AppShell.js';
+import { AppChrome } from './session/AppChrome.js';
+import { isSignInPath } from './session/paths.js';
 import { accountingRoutes } from './screens/accounting/routes.js';
 import { adminRoutes } from './screens/admin/routes.js';
 import { approvalRoutes } from './screens/approvals/routes.js';
 import { attendanceRoutes } from './screens/attendance/routes.js';
 import { documentRoutes } from './screens/documents/routes.js';
 import { orgRoutes } from './screens/org/routes.js';
+import { signinRoutes } from './screens/signin/routes.js';
 
 /**
  * The route tree, declared in code and composed from one module per area.
@@ -21,9 +30,15 @@ import { orgRoutes } from './screens/org/routes.js';
  * exports `routes(parent)` and owns its own file.
  */
 
+/**
+ * Sign-in is the one screen that renders without a session and without the
+ * shell — no sidebar to a place you cannot go, no support banner about a
+ * company you have not proved you belong to. Everything else renders inside
+ * `AppChrome`, which owns the session guard and that banner.
+ */
 function Shell(): React.ReactNode {
-  const { t } = useTranslation();
-  return <AppShell nav={NAVIGATION.map((item) => ({ to: item.to, label: t(item.labelKey) }))} />;
+  const signIn = useRouterState({ select: (state) => isSignInPath(state.location.pathname) });
+  return signIn ? <Outlet /> : <AppChrome />;
 }
 
 const rootRoute = createRootRoute({ component: Shell });
@@ -61,6 +76,7 @@ const routeTree = rootRoute.addChildren([
   ...orgRoutes(rootRoute),
   ...accountingRoutes(rootRoute),
   ...adminRoutes(rootRoute),
+  ...signinRoutes(rootRoute),
 ]);
 
 export const router = createRouter({ routeTree, defaultPreload: 'intent' });

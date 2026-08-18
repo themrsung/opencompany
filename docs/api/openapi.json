@@ -63,6 +63,9 @@
     "description" : "Entries, corrections and batches. Debits equal credits exactly or the entry does not exist; corrections are numbered revisions and a wrong transaction is voided, never deleted.",
     "name" : "Accounting: journal"
   }, {
+    "description" : "Opening an empty installation. Available only while it is empty.",
+    "name" : "Installation"
+  }, {
     "description" : "The account tree. Only leaves are postable; accounts are retired, never deleted, so prior-period reports never change behind anyone.",
     "name" : "Accounting: chart of accounts"
   }, {
@@ -1962,7 +1965,7 @@
       },
       "post" : {
         "description" : "Master only, audited, and refused if the manifest asks for a permission the installing master did not approve.",
-        "operationId" : "install_1",
+        "operationId" : "install_2",
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -4592,7 +4595,7 @@
       },
       "post" : {
         "description" : "Requires documents.font:install. The upload must carry licenceAcknowledged=true, the current acknowledgement version, and the acknowledgement text echoed back exactly; any of the three missing is a refusal, because an acknowledgement that can be omitted is not one. Who agreed, when, and the exact wording are recorded on the font row.",
-        "operationId" : "install",
+        "operationId" : "install_1",
         "parameters" : [ {
           "in" : "query",
           "name" : "companyId",
@@ -4992,6 +4995,76 @@
         },
         "summary" : "How many documents a removal would affect",
         "tags" : [ "Fonts" ]
+      }
+    },
+    "/api/v1/install" : {
+      "get" : {
+        "description" : "True only while POST /api/v1/install would succeed.",
+        "operationId" : "availability",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/InstallationAvailabilityView"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ ],
+        "summary" : "Is this installation still empty?",
+        "tags" : [ "Installation" ]
+      },
+      "post" : {
+        "description" : "Unauthenticated by necessity and available only while the database holds no installation row, no account and no company. The TOTP secret and the recovery codes in the response are the only copies that will exist.",
+        "operationId" : "install",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/InstallationRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/InstallationResultView"
+                }
+              }
+            },
+            "description" : "Installed. The credentials are shown once."
+          },
+          "409" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "The database is not empty, so this box is not ours to open."
+          },
+          "410" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "Already installed. The endpoint is gone and does not come back."
+          }
+        },
+        "security" : [ ],
+        "summary" : "Open an empty installation",
+        "tags" : [ "Installation" ]
       }
     },
     "/api/v1/leave/balance" : {
@@ -7179,7 +7252,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/IssueRequest"
+                "$ref" : "#/components/schemas/TemporaryMasterIssueRequest"
               }
             }
           },
@@ -8464,17 +8537,6 @@
           }
         }
       },
-      "Approver" : {
-        "properties" : {
-          "accountId" : {
-            "type" : "string"
-          },
-          "name" : {
-            "type" : "string"
-          }
-        },
-        "required" : [ "accountId", "name" ]
-      },
       "AssignRequest" : {
         "properties" : {
           "effectiveFrom" : {
@@ -8779,13 +8841,6 @@
           }
         }
       },
-      "BusinessInstant" : {
-        "properties" : {
-          "outsideCalendarDay" : {
-            "type" : "boolean"
-          }
-        }
-      },
       "Capability" : {
         "properties" : {
           "description" : {
@@ -8970,7 +9025,9 @@
       "CorrectEntryRequest" : {
         "properties" : {
           "at" : {
-            "$ref" : "#/components/schemas/BusinessInstant"
+            "type" : "string",
+            "description" : "A business instant: YYYY-MM-DDT[-]HH:MM:SS.mmm, with no timezone and no trailing Z — a Z is rejected. The clock face runs from -24:00:00 to +48:00:00, so a shift ending at three in the morning is 27:00 on the business day it began. Ordering is by business date first and offset second; never sort these strings lexically, because '-' sorts below every digit.",
+            "example" : "2026-08-30T27:00:00.000"
           },
           "description" : {
             "type" : "string"
@@ -10016,7 +10073,9 @@
             "type" : "string"
           },
           "postedAt" : {
-            "$ref" : "#/components/schemas/BusinessInstant"
+            "type" : "string",
+            "description" : "A business instant: YYYY-MM-DDT[-]HH:MM:SS.mmm, with no timezone and no trailing Z — a Z is rejected. The clock face runs from -24:00:00 to +48:00:00, so a shift ending at three in the morning is 27:00 on the business day it began. Ordering is by business date first and offset second; never sort these strings lexically, because '-' sorts below every digit.",
+            "example" : "2026-08-30T27:00:00.000"
           },
           "postings" : {
             "type" : "array",
@@ -10509,6 +10568,144 @@
         },
         "required" : [ "companyId", "kind", "moduleId", "name", "riskWarningShown", "version" ]
       },
+      "InstallationAvailabilityView" : {
+        "description" : "Whether this installation is still empty and can be opened.",
+        "properties" : {
+          "available" : {
+            "type" : "boolean",
+            "description" : "True only while POST /api/v1/install would succeed."
+          }
+        }
+      },
+      "InstallationRequest" : {
+        "description" : "The first company and the first master account.",
+        "properties" : {
+          "baseCurrencyCode" : {
+            "type" : "string",
+            "description" : "The book's base currency, used only when accounting is on.",
+            "example" : "KRW",
+            "maxLength" : 12,
+            "minLength" : 0
+          },
+          "businessRegistrationNumber" : {
+            "type" : "string",
+            "description" : "사업자등록번호",
+            "example" : "220-81-45678",
+            "maxLength" : 40,
+            "minLength" : 0
+          },
+          "companyCode" : {
+            "type" : "string",
+            "description" : "Short stable code for the company, e.g. HANBIT",
+            "example" : "HANBIT",
+            "maxLength" : 40,
+            "minLength" : 0
+          },
+          "companyNameEn" : {
+            "type" : "string",
+            "example" : "Hanbit Industries Co., Ltd.",
+            "maxLength" : 200,
+            "minLength" : 0
+          },
+          "companyNameKo" : {
+            "type" : "string",
+            "example" : "한빛산업 주식회사",
+            "maxLength" : 200,
+            "minLength" : 0
+          },
+          "designatedRepresentatives" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "How many 대표이사 the company has designated.",
+            "example" : 1,
+            "minimum" : 1
+          },
+          "establishedOn" : {
+            "type" : "string",
+            "format" : "date",
+            "description" : "설립일",
+            "example" : "2018-03-02"
+          },
+          "masterDisplayName" : {
+            "type" : "string",
+            "example" : "김서연",
+            "maxLength" : 200,
+            "minLength" : 0
+          },
+          "masterUsername" : {
+            "type" : "string",
+            "description" : "How the first master signs in. There is no password.",
+            "example" : "daepyo",
+            "maxLength" : 100,
+            "minLength" : 0
+          },
+          "representationMode" : {
+            "type" : "string",
+            "description" : "SEVERAL (각자대표) or JOINT (공동대표)",
+            "enum" : [ "SEVERAL", "JOINT" ],
+            "example" : "SEVERAL"
+          },
+          "requiredApprovals" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "How many 대표 signatures a representative step needs. Must be at least 2 under JOINT.",
+            "example" : 1,
+            "minimum" : 1
+          }
+        },
+        "required" : [ "companyCode", "companyNameKo", "masterDisplayName", "masterUsername" ]
+      },
+      "InstallationResultView" : {
+        "description" : "The opened installation. The credentials are shown exactly once.",
+        "properties" : {
+          "approvalLineDocumentTypes" : {
+            "type" : "array",
+            "description" : "Document types that now have a company-wide 결재선.",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "bootstrapPermissions" : {
+            "type" : "array",
+            "description" : "The grants the first master holds, as resource:action@scope. They are wildcards because the grant service refuses to hand out a permission the grantor does not hold; they cannot be re-granted, and they can be revoked.",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "companyCode" : {
+            "type" : "string"
+          },
+          "companyId" : {
+            "type" : "string"
+          },
+          "defaultRowsWritten" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Rows of factory catalogue written for the new company: the 직급 ladder, the 직무 set, the attendance statuses and the 연차 policy."
+          },
+          "masterAccountId" : {
+            "type" : "string"
+          },
+          "masterUsername" : {
+            "type" : "string"
+          },
+          "otpauthUri" : {
+            "type" : "string",
+            "description" : "Render as the QR code. Contains the secret: never log it. Shown once."
+          },
+          "recoveryCodes" : {
+            "type" : "array",
+            "description" : "Single-use recovery codes, in plaintext. Only hashes are stored, so this is the only time they can be read. Shown once.",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "secretBase32" : {
+            "type" : "string",
+            "description" : "The TOTP secret, grouped in fours for manual entry. Shown once."
+          }
+        }
+      },
       "InstalledFontView" : {
         "properties" : {
           "blobSha256" : {
@@ -10609,57 +10806,22 @@
       },
       "IssueRequest" : {
         "properties" : {
-          "accountId" : {
+          "expiresAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "name" : {
             "type" : "string"
           },
-          "approvalDocumentId" : {
-            "type" : "string"
-          },
-          "approvedBy" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/Approver"
-            }
-          },
-          "capabilities" : {
+          "scopes" : {
             "type" : "array",
             "items" : {
               "type" : "string"
-            }
-          },
-          "companyId" : {
-            "type" : "string"
-          },
-          "companyName" : {
-            "type" : "string"
-          },
-          "engineerName" : {
-            "type" : "string"
-          },
-          "hours" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "reason" : {
-            "type" : "string",
-            "maxLength" : 2147483647,
-            "minLength" : 10
-          },
-          "representationMode" : {
-            "type" : "string"
-          },
-          "requiredApprovals" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "ticketReference" : {
-            "type" : "string"
-          },
-          "typedCompanyName" : {
-            "type" : "string"
+            },
+            "uniqueItems" : true
           }
         },
-        "required" : [ "accountId", "approvalDocumentId", "approvedBy", "companyId", "companyName", "engineerName", "reason", "representationMode", "typedCompanyName" ]
+        "required" : [ "name" ]
       },
       "IssuedApiKey" : {
         "properties" : {
@@ -10993,7 +11155,9 @@
             "type" : "string"
           },
           "postedAt" : {
-            "$ref" : "#/components/schemas/BusinessInstant"
+            "type" : "string",
+            "description" : "A business instant: YYYY-MM-DDT[-]HH:MM:SS.mmm, with no timezone and no trailing Z — a Z is rejected. The clock face runs from -24:00:00 to +48:00:00, so a shift ending at three in the morning is 27:00 on the business day it began. Ordering is by business date first and offset second; never sort these strings lexically, because '-' sorts below every digit.",
+            "example" : "2026-08-30T27:00:00.000"
           },
           "postings" : {
             "type" : "array",
@@ -11043,7 +11207,9 @@
             "type" : "boolean"
           },
           "postedAt" : {
-            "$ref" : "#/components/schemas/BusinessInstant"
+            "type" : "string",
+            "description" : "A business instant: YYYY-MM-DDT[-]HH:MM:SS.mmm, with no timezone and no trailing Z — a Z is rejected. The clock face runs from -24:00:00 to +48:00:00, so a shift ending at three in the morning is 27:00 on the business day it began. Ordering is by business date first and offset second; never sort these strings lexically, because '-' sorts below every digit.",
+            "example" : "2026-08-30T27:00:00.000"
           },
           "postings" : {
             "type" : "array",
@@ -11257,6 +11423,36 @@
           },
           "total" : {
             "type" : "string"
+          }
+        }
+      },
+      "ProblemDetail" : {
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "detail" : {
+            "type" : "string"
+          },
+          "extensions" : {
+            "type" : "object",
+            "additionalProperties" : { }
+          },
+          "status" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "type" : {
+            "type" : "string"
+          },
+          "violations" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Violation"
+            }
           }
         }
       },
@@ -11519,7 +11715,9 @@
             "type" : "string"
           },
           "at" : {
-            "$ref" : "#/components/schemas/BusinessInstant"
+            "type" : "string",
+            "description" : "A business instant: YYYY-MM-DDT[-]HH:MM:SS.mmm, with no timezone and no trailing Z — a Z is rejected. The clock face runs from -24:00:00 to +48:00:00, so a shift ending at three in the morning is 27:00 on the business day it began. Ordering is by business date first and offset second; never sort these strings lexically, because '-' sorts below every digit.",
+            "example" : "2026-08-30T27:00:00.000"
           },
           "kind" : {
             "type" : "string"
@@ -11786,6 +11984,71 @@
           }
         }
       },
+      "TemporaryMasterApproverRequest" : {
+        "properties" : {
+          "accountId" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "accountId", "name" ]
+      },
+      "TemporaryMasterIssueRequest" : {
+        "properties" : {
+          "accountId" : {
+            "type" : "string"
+          },
+          "approvalDocumentId" : {
+            "type" : "string"
+          },
+          "approvedBy" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/TemporaryMasterApproverRequest"
+            }
+          },
+          "capabilities" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "companyId" : {
+            "type" : "string"
+          },
+          "companyName" : {
+            "type" : "string"
+          },
+          "engineerName" : {
+            "type" : "string"
+          },
+          "hours" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "reason" : {
+            "type" : "string",
+            "maxLength" : 2147483647,
+            "minLength" : 10
+          },
+          "representationMode" : {
+            "type" : "string"
+          },
+          "requiredApprovals" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "ticketReference" : {
+            "type" : "string"
+          },
+          "typedCompanyName" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "accountId", "approvalDocumentId", "approvedBy", "companyId", "companyName", "engineerName", "reason", "representationMode", "typedCompanyName" ]
+      },
       "TemporaryMasterSessionReport" : { },
       "TerminationRequest" : {
         "properties" : {
@@ -11926,10 +12189,25 @@
           }
         }
       },
+      "Violation" : {
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "field" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        }
+      },
       "VoidRequest" : {
         "properties" : {
           "at" : {
-            "$ref" : "#/components/schemas/BusinessInstant"
+            "type" : "string",
+            "description" : "A business instant: YYYY-MM-DDT[-]HH:MM:SS.mmm, with no timezone and no trailing Z — a Z is rejected. The clock face runs from -24:00:00 to +48:00:00, so a shift ending at three in the morning is 27:00 on the business day it began. Ordering is by business date first and offset second; never sort these strings lexically, because '-' sorts below every digit.",
+            "example" : "2026-08-30T27:00:00.000"
           },
           "reason" : {
             "type" : "string"

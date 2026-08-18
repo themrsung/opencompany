@@ -25,7 +25,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -103,7 +102,7 @@ class OrgApiSecurityIntegrationTest {
     @DisplayName("a signed-in caller without the grant is refused with 403 naming the permission")
     void unauthorisedIs403NamingThePermission() throws Exception {
         MvcResult result = mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/org/companies")
-                .header(HttpHeaders.AUTHORIZATION, fixture.bearer(accountId))).andReturn();
+                .cookie(fixture.sessionCookie(accountId))).andReturn();
 
         assertThat(result.getResponse().getStatus()).isEqualTo(403);
 
@@ -121,7 +120,7 @@ class OrgApiSecurityIntegrationTest {
                 PermissionScope.ALL, true);
 
         MvcResult result = mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/org/companies")
-                .header(HttpHeaders.AUTHORIZATION, fixture.bearer(accountId))).andReturn();
+                .cookie(fixture.sessionCookie(accountId))).andReturn();
 
         assertThat(result.getResponse().getStatus()).isEqualTo(200);
         assertThat(body(result).path("items")).hasSize(1);
@@ -137,7 +136,7 @@ class OrgApiSecurityIntegrationTest {
 
         MvcResult result = mockMvc.perform(
                 MockMvcRequestBuilders.get("/api/v1/org/companies/" + companyId)
-                        .header(HttpHeaders.AUTHORIZATION, fixture.bearer(accountId))).andReturn();
+                        .cookie(fixture.sessionCookie(accountId))).andReturn();
 
         assertThat(result.getResponse().getStatus())
                 .as("no count of allows out-votes a deny within its scope")

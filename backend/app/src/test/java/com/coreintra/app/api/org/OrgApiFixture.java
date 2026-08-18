@@ -1,5 +1,6 @@
 package com.coreintra.app.api.org;
 
+import com.coreintra.app.api.security.SessionCookies;
 import com.coreintra.auth.service.SessionService;
 import com.coreintra.core.org.Company;
 import com.coreintra.core.org.Employee;
@@ -22,6 +23,7 @@ import com.coreintra.core.permission.PermissionKey;
 import com.coreintra.core.permission.PermissionScope;
 import java.time.LocalDate;
 import java.util.UUID;
+import javax.servlet.http.Cookie;
 import javax.sql.DataSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -165,9 +167,19 @@ public class OrgApiFixture {
         grant(GrantSource.USER_ACCOUNT, accountId, "admin.master:update", PermissionScope.ALL, true);
     }
 
-    /** The {@code Authorization} header value for a browser-equivalent session. */
-    public String bearer(String accountId) {
-        return "Bearer " + sessions.issue(accountId, "integration-test", "127.0.0.1").accessToken();
+    /**
+     * A browser-equivalent credential: the access token in its HttpOnly cookie.
+     *
+     * <p>A cookie and not an {@code Authorization} header, because that is the
+     * only shape the filter accepts for a session — a bearer token that is not
+     * an API key is refused rather than guessed at, so that sending a bogus
+     * header cannot fall through and be authenticated as whoever the browser
+     * session belongs to. A test that used a header would be exercising a path
+     * production does not have.
+     */
+    public Cookie sessionCookie(String accountId) {
+        return new Cookie(SessionCookies.ACCESS_COOKIE,
+                sessions.issue(accountId, "integration-test", "127.0.0.1").accessToken());
     }
 
     public static String id() {

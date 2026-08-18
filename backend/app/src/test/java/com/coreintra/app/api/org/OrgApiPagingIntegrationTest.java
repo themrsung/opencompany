@@ -19,6 +19,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import javax.servlet.http.Cookie;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +28,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -73,7 +73,7 @@ class OrgApiPagingIntegrationTest {
 
     private OrgApiFixture fixture;
     private String companyId;
-    private String authorization;
+    private Cookie session;
 
     @BeforeEach
     void seed() {
@@ -86,7 +86,7 @@ class OrgApiPagingIntegrationTest {
         String accountId = fixture.account("admin", "관리자", callerEmployeeId, false);
         fixture.grant(GrantSource.USER_ACCOUNT, accountId, "hr.employee:read",
                 PermissionScope.ALL, true);
-        authorization = fixture.bearer(accountId);
+        session = fixture.sessionCookie(accountId);
     }
 
     @Test
@@ -172,7 +172,7 @@ class OrgApiPagingIntegrationTest {
         MvcResult result = mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/org/employees")
                 .param("companyId", companyId)
                 .param("cursor", "not-a-cursor-at-all")
-                .header(HttpHeaders.AUTHORIZATION, authorization)).andReturn();
+                .cookie(session)).andReturn();
 
         assertThat(result.getResponse().getStatus())
                 .as("quietly serving page one for a corrupt cursor makes an infinite loop look "
@@ -185,7 +185,7 @@ class OrgApiPagingIntegrationTest {
                 .param("companyId", companyId)
                 .param("limit", Integer.toString(limit))
                 .param("cursor", cursor == null ? "" : cursor)
-                .header(HttpHeaders.AUTHORIZATION, authorization)).andReturn();
+                .cookie(session)).andReturn();
 
         assertThat(result.getResponse().getStatus()).isEqualTo(200);
         return JSON.readTree(result.getResponse().getContentAsString(StandardCharsets.UTF_8));

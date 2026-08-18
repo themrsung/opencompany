@@ -20,6 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import javax.servlet.http.Cookie;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,7 +30,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -72,7 +72,7 @@ class AccountApiIntegrationTest {
 
     private OrgApiFixture fixture;
     private String accountId;
-    private String authorization;
+    private Cookie session;
 
     @BeforeEach
     void seed() {
@@ -83,7 +83,7 @@ class AccountApiIntegrationTest {
         String employeeId = fixture.employee(companyId, "0001", "김민준");
         accountId = fixture.account("minjun", "김민준", employeeId, true);
         fixture.grantAccountAdministration(accountId);
-        authorization = fixture.bearer(accountId);
+        session = fixture.sessionCookie(accountId);
     }
 
     @Nested
@@ -189,7 +189,7 @@ class AccountApiIntegrationTest {
 
             MvcResult revoked = mockMvc.perform(
                     MockMvcRequestBuilders.delete("/api/v1/account/api-keys/" + keyId)
-                            .header(HttpHeaders.AUTHORIZATION, authorization)).andReturn();
+                            .cookie(session)).andReturn();
 
             assertThat(revoked.getResponse().getStatus()).isEqualTo(204);
             assertThat(body(get("/api/v1/account/api-keys")).path("items")).isEmpty();
@@ -205,7 +205,7 @@ class AccountApiIntegrationTest {
 
             MvcResult result = mockMvc.perform(
                     MockMvcRequestBuilders.delete("/api/v1/account/api-keys/" + otherKeyId)
-                            .header(HttpHeaders.AUTHORIZATION, authorization)).andReturn();
+                            .cookie(session)).andReturn();
 
             assertThat(result.getResponse().getStatus())
                     .as("the key id alone must not be enough; it has to be on the named account")
@@ -225,7 +225,7 @@ class AccountApiIntegrationTest {
 
             MvcResult result = mockMvc.perform(
                     MockMvcRequestBuilders.delete("/api/v1/account/masters/" + accountId)
-                            .header(HttpHeaders.AUTHORIZATION, authorization)).andReturn();
+                            .cookie(session)).andReturn();
 
             assertThat(result.getResponse().getStatus())
                     .as("409: the caller has the authority, the installation cannot allow it")
@@ -253,7 +253,7 @@ class AccountApiIntegrationTest {
 
             MvcResult demoted = mockMvc.perform(
                     MockMvcRequestBuilders.delete("/api/v1/account/masters/" + accountId)
-                            .header(HttpHeaders.AUTHORIZATION, authorization)).andReturn();
+                            .cookie(session)).andReturn();
 
             assertThat(demoted.getResponse().getStatus()).isEqualTo(204);
             assertThat(body(get("/api/v1/account/masters")).path("activeMasterCount").asLong())
@@ -263,7 +263,7 @@ class AccountApiIntegrationTest {
 
     private MvcResult get(String path) throws Exception {
         MvcResult result = mockMvc.perform(MockMvcRequestBuilders.get(path)
-                .header(HttpHeaders.AUTHORIZATION, authorization)).andReturn();
+                .cookie(session)).andReturn();
         assertThat(result.getResponse().getStatus()).isEqualTo(200);
         return result;
     }
@@ -271,7 +271,7 @@ class AccountApiIntegrationTest {
     private MvcResult post(String path, String json) throws Exception {
         org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder request =
                 MockMvcRequestBuilders.post(path)
-                        .header(HttpHeaders.AUTHORIZATION, authorization);
+                        .cookie(session);
         if (json != null) {
             request = request.contentType(MediaType.APPLICATION_JSON).content(json);
         }

@@ -17,6 +17,7 @@ import com.coreintra.core.permission.PermissionScope;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
+import javax.servlet.http.Cookie;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,7 +69,7 @@ class OrgApiConcurrencyIntegrationTest {
 
     private OrgApiFixture fixture;
     private String companyId;
-    private String authorization;
+    private Cookie session;
 
     @BeforeEach
     void seed() {
@@ -83,7 +84,7 @@ class OrgApiConcurrencyIntegrationTest {
                 PermissionScope.ALL, true);
         fixture.grant(GrantSource.USER_ACCOUNT, accountId, "company.settings:update",
                 PermissionScope.ALL, true);
-        authorization = fixture.bearer(accountId);
+        session = fixture.sessionCookie(accountId);
     }
 
     @Test
@@ -148,7 +149,7 @@ class OrgApiConcurrencyIntegrationTest {
     private MvcResult read() throws Exception {
         MvcResult result = mockMvc.perform(
                 MockMvcRequestBuilders.get("/api/v1/org/companies/" + companyId)
-                        .header(HttpHeaders.AUTHORIZATION, authorization)).andReturn();
+                        .cookie(session)).andReturn();
         assertThat(result.getResponse().getStatus()).isEqualTo(200);
         return result;
     }
@@ -158,7 +159,7 @@ class OrgApiConcurrencyIntegrationTest {
                 MockMvcRequestBuilders.patch("/api/v1/org/companies/" + companyId + "/name")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nameKo\":\"" + nameKo + "\"}")
-                        .header(HttpHeaders.AUTHORIZATION, authorization);
+                        .cookie(session);
         if (ifMatch != null) {
             request = request.header(HttpHeaders.IF_MATCH, ifMatch);
         }

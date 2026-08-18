@@ -1,0 +1,13 @@
+# Integration tests run against a real PostgreSQL (see DatabaseTestSupport).
+# Never H2: this schema uses generated columns, domain constraints and
+# text_pattern_ops indexes, none of which H2 models the same way.
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    clean-disabled: false
+logging:
+  level:
+    org.hibernate.SQL: WARN

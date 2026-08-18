@@ -45,6 +45,20 @@ describe('the two catalogues describe the same product', () => {
   });
 });
 
+describe('the screen modules merge cleanly over the shared catalogue', () => {
+  it('has no screen key that silently replaces a shared one', () => {
+    // The merge is one level deep, so a screen registering under a name the
+    // shared catalogue already owns replaces it wholesale rather than
+    // extending it — and every string under the shared key disappears with no
+    // error anywhere. One agent building the permission explainer hit exactly
+    // this and worked around it by registering as `explainer`; the next person
+    // should be told, not left to notice.
+    const shared = Object.keys(ko);
+    const screens = Object.keys(screensKo);
+    expect(screens.filter((key) => shared.includes(key))).toEqual([]);
+  });
+});
+
 describe('Korean register', () => {
   // 해요체 endings are the usual way a machine translation gives itself away
   // here. 대표이사s read these screens; the register has to hold.

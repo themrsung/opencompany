@@ -66,4 +66,13 @@ test-frontend: ## Frontend tests only
 
 .PHONY: seed
 seed: ## Load the demo company (two entities, 공동대표, ~40 employees)
-	$(COMPOSE) exec api java -jar /app/app.jar --spring.profiles.active=seed
+	@# A second JVM inside the running api container, so it shares the database
+	@# and the encryption key without needing either on the host. It must not
+	@# start a web server: the port is already taken by the api it is running
+	@# inside, and a seed that fails on "address already in use" tells you
+	@# nothing about the seed. With no web server the process exits when the
+	@# runner returns — zero when the demo is loaded, non-zero with the reason
+	@# when it is not.
+	$(COMPOSE) exec api java -jar /app/app.jar \
+		--spring.profiles.active=seed \
+		--spring.main.web-application-type=none

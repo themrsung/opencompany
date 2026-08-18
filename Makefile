@@ -54,7 +54,9 @@ restore: .env ## Restore from a tarball: make restore TARBALL=backups/xyz.tar.gz
 verify: ## Run every check CI runs
 	./ops/verify-java8-gate.sh
 	cd backend && ./mvnw -B verify
-	cd frontend && pnpm install --frozen-lockfile && pnpm test && pnpm build
+	cd frontend && pnpm install --frozen-lockfile && pnpm typecheck && pnpm lint && pnpm test && pnpm build
+	@# The generated client must match the spec the backend just produced.
+	./ops/check-api-client-drift.sh
 
 .PHONY: test-backend
 test-backend: ## Backend tests only

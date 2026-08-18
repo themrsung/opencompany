@@ -3,14 +3,14 @@
 -- Every business instant in this schema is stored as the same three columns:
 --
 --   <name>_business_date   DATE                      not null
---   <name>_offset_seconds  business_offset_seconds   not null
+--   <name>_offset_seconds  INTEGER  not null, CHECK business_offset_is_valid()
 --   <name>_absolute_ts     TIMESTAMP  GENERATED ...  stored, derived
 --
 -- plus an index on (business_date, offset_seconds) -- the business ordering.
 --
 -- Three rules this file enforces so they cannot be forgotten per-table:
 --
---  1. The 72-hour window is a DOMAIN constraint, not application validation.
+--  1. The 72-hour window is a DATABASE constraint, not application validation.
 --     A raw SQL insert from a migration, a support session or a client module
 --     cannot write an offset outside [-86400, +172800].
 --
@@ -23,13 +23,27 @@
 --  3. created_at (UTC) is separate and always present. Business time is what
 --     the organisation agrees happened; UTC is what the machine observed.
 
-CREATE DOMAIN business_offset_seconds AS INTEGER
-    CONSTRAINT business_offset_within_72h_window
-        CHECK (VALUE >= -86400 AND VALUE <= 172800);
+-- The 72-hour window, defined once and applied as a CHECK on every offset column.
+--
+-- This was originally a CREATE DOMAIN, which reads better. Hibernate 5.6's
+-- schema validator reports a domain-typed column as Types#DISTINCT rather than
+-- INTEGER and refuses to start, so a domain would force ddl-auto validation off
+-- across the whole application -- losing a real check to gain a nicer type name.
+-- A shared IMMUTABLE function keeps the rule in exactly one place while leaving
+-- the column an ordinary int4.
+CREATE FUNCTION business_offset_is_valid(offset_seconds INTEGER)
+    RETURNS BOOLEAN
+    LANGUAGE SQL
+    IMMUTABLE
+    PARALLEL SAFE
+AS $$
+    SELECT offset_seconds >= -86400 AND offset_seconds <= 172800
+$$;
 
-COMMENT ON DOMAIN business_offset_seconds IS
-    'Seconds from the business date''s midnight. -86400 = -24:00:00, +172800 = +48:00:00. '
-    'A 03:00 shift end is 97200 (27:00) on the business day it belongs to.';
+COMMENT ON FUNCTION business_offset_is_valid(INTEGER) IS
+    'The 72-hour window. -86400 = -24:00:00, +172800 = +48:00:00. A 03:00 shift '
+    'end is 97200 (27:00) on the business day it belongs to. Every offset column '
+    'carries CHECK (business_offset_is_valid(<column>)).';
 
 -- Convenience for reports that need the derived wall-clock moment in a query
 -- where a generated column is not available (e.g. over a CTE).

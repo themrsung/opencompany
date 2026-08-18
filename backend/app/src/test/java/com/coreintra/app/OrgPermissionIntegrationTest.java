@@ -202,11 +202,18 @@ class OrgPermissionIntegrationTest {
 
     @Test
     @DisplayName("the database refuses a business offset outside the 72-hour window")
-    void businessOffsetDomainIsEnforcedByTheDatabase() {
+    void businessOffsetWindowIsEnforcedByTheDatabase() {
+        // The window is a database constraint rather than application validation,
+        // so a raw insert from a migration, a support session or a client module
+        // cannot write an impossible instant. Asserted against a real table
+        // rather than the helper function alone, because it is the CHECK on the
+        // column that actually protects the data.
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
         jdbc.execute("create temporary table offset_probe ("
                 + "  id serial primary key,"
-                + "  offset_seconds business_offset_seconds not null)");
+                + "  offset_seconds integer not null"
+                + "    constraint offset_probe_in_window"
+                + "    check (business_offset_is_valid(offset_seconds)))");
 
         jdbc.update("insert into offset_probe (offset_seconds) values (?)", 172_800);
         jdbc.update("insert into offset_probe (offset_seconds) values (?)", -86_400);
@@ -214,11 +221,24 @@ class OrgPermissionIntegrationTest {
         try {
             jdbc.update("insert into offset_probe (offset_seconds) values (?)", 172_801);
             org.junit.jupiter.api.Assertions.fail(
-                    "the database accepted an offset beyond +48:00:00; the domain constraint is "
-                            + "not doing its job and raw SQL could write an impossible instant");
+                    "the database accepted an offset beyond +48:00:00; the window check is not "
+                            + "doing its job and raw SQL could write an impossible instant");
         } catch (org.springframework.dao.DataIntegrityViolationException expected) {
-            assertThat(expected.getMessage()).contains("business_offset_within_72h_window");
+            assertThat(expected.getMessage()).contains("offset_probe_in_window");
         }
+    }
+
+    @Test
+    @DisplayName("a real approval action row cannot carry an out-of-window offset either")
+    void approvalActionOffsetIsChecked() {
+        // The helper function is only worth anything if the real tables use it.
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        Integer checks = jdbc.queryForObject(
+                "select count(*) from pg_constraint "
+                        + "where conname = 'approval_action_acted_offset_in_window'", Integer.class);
+        assertThat(checks)
+                .as("approval_action must carry the 72-hour window check")
+                .isEqualTo(1);
     }
 
     @Test

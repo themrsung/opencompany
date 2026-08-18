@@ -93,6 +93,21 @@ jobs:
       - name: Regenerate the API client and fail on any diff
         run: ./ops/check-api-client-drift.sh
 
+  example-module:
+    # The worked example is built against the real SPI, so it cannot rot into
+    # pseudocode while the docs keep claiming it works.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21", cache: maven }
+      - name: Install the SPI
+        working-directory: backend
+        run: ./mvnw -B -q install -DskipTests -pl platform-compat,business-time,module-api -am
+      - name: Build the example module
+        working-directory: examples/module-hello-assets
+        run: mvn -B package
+
   dependency-posture:
     # Boot 2.7 is past OSS EOL (ADR 0001). Known CVEs are documented in
     # docs/security/dependency-posture.md; this job keeps that document honest.

@@ -265,6 +265,61 @@ public final class InternalDoc implements Serializable {
     }
 
     /**
+     * A content control wrapping other blocks.
+     *
+     * <p>{@link FieldBlock} covers the common case — a typed field holding
+     * text. A 결재란 is not that: it is a <em>table</em> that has to be bound as
+     * one named control, because the approval module asks "does this template
+     * have an approvalBlock?" and gets an answer about the whole grid rather
+     * than about a cell in it.
+     *
+     * <p>Becomes a block-level {@code w:sdt} in DOCX and a 누름틀 spanning the
+     * same content in HWPX, so the binding survives both serialisers.
+     */
+    public static final class ControlBlock implements Block {
+        private static final long serialVersionUID = 1L;
+
+        private final String tag;
+        private final String alias;
+        private final List<Block> blocks;
+
+        public ControlBlock(String tag, String alias, List<Block> blocks) {
+            this.tag = tag;
+            this.alias = alias;
+            this.blocks = Immutables.copyOf(blocks);
+        }
+
+        public String tag() {
+            return tag;
+        }
+
+        /** The human-readable name Word shows on the control, or null. */
+        public String alias() {
+            return alias;
+        }
+
+        public List<Block> blocks() {
+            return blocks;
+        }
+
+        /** The control's text, which is what the extracted field value becomes. */
+        public String text() {
+            StringBuilder text = new StringBuilder();
+            for (Block block : blocks) {
+                if (block instanceof Paragraph) {
+                    text.append(((Paragraph) block).text());
+                }
+            }
+            return text.toString();
+        }
+
+        @Override
+        public boolean isOpaque() {
+            return false;
+        }
+    }
+
+    /**
      * Content this model does not understand, carried through verbatim.
      *
      * <p>The single most important block type here. A real client document has

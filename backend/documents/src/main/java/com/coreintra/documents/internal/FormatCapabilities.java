@@ -27,22 +27,35 @@ public final class FormatCapabilities implements Serializable {
     /** How well one feature survives. */
     public enum Support {
         /** Round-trips without loss. */
-        FULL("survives"),
+        FULL("survives", "유지됩니다"),
         /** Survives with visible differences — spacing, exact styling. */
-        DEGRADED("degrades"),
+        DEGRADED("degrades", "일부 달라집니다"),
         /** Cannot be represented and is dropped. Must be warned about, loudly. */
-        DROPPED("is dropped"),
+        DROPPED("is dropped", "사라집니다"),
         /** Preserved as an opaque block: not editable, but not lost either. */
-        PRESERVED_OPAQUE("is preserved but not editable");
+        PRESERVED_OPAQUE("is preserved but not editable", "보존되지만 편집할 수 없습니다");
 
         private final String description;
+        private final String descriptionKo;
 
-        Support(String description) {
+        Support(String description, String descriptionKo) {
             this.description = description;
+            this.descriptionKo = descriptionKo;
         }
 
         public String description() {
             return description;
+        }
+
+        /**
+         * The same thing in Korean.
+         *
+         * <p>This text is shown to a user at export time, and Korean is the
+         * default locale (§12). An export warning only in English is a warning
+         * most of these users will not read.
+         */
+        public String descriptionKo() {
+            return descriptionKo;
         }
 
         /** True when a user must be told before they save. */
@@ -53,30 +66,36 @@ public final class FormatCapabilities implements Serializable {
 
     /** The features the matrix reports on. */
     public enum Feature {
-        HEADINGS("headings"),
-        RUN_EMPHASIS("bold / italic / underline / strikethrough"),
-        LISTS("bulleted and numbered lists"),
-        TABLES("tables"),
-        MERGED_CELLS("merged table cells"),
-        IMAGES("images"),
-        PAGE_BREAKS("page breaks"),
-        CONTENT_CONTROLS("typed fields (content controls)"),
-        APPROVAL_BLOCK("결재란"),
-        HEADERS_FOOTERS("headers and footers"),
-        FOOTNOTES("footnotes"),
-        TRACKED_CHANGES("tracked changes"),
-        COMMENTS("comments"),
-        CHARTS("charts"),
-        COMPLEX_SCRIPT("complex-script shaping (Arabic, Indic)");
+        HEADINGS("headings", "제목 스타일"),
+        RUN_EMPHASIS("bold / italic / underline / strikethrough", "굵게 / 기울임 / 밑줄 / 취소선"),
+        LISTS("bulleted and numbered lists", "글머리 기호 및 번호 목록"),
+        TABLES("tables", "표"),
+        MERGED_CELLS("merged table cells", "병합된 셀"),
+        IMAGES("images", "그림"),
+        PAGE_BREAKS("page breaks", "쪽 나눔"),
+        CONTENT_CONTROLS("typed fields (content controls)", "입력 항목 (필드)"),
+        APPROVAL_BLOCK("결재란", "결재란"),
+        HEADERS_FOOTERS("headers and footers", "머리말 및 꼬리말"),
+        FOOTNOTES("footnotes", "각주"),
+        TRACKED_CHANGES("tracked changes", "변경 내용 추적"),
+        COMMENTS("comments", "메모"),
+        CHARTS("charts", "차트"),
+        COMPLEX_SCRIPT("complex-script shaping (Arabic, Indic)", "복합 문자 처리 (아랍 문자, 인도계 문자)");
 
         private final String label;
+        private final String labelKo;
 
-        Feature(String label) {
+        Feature(String label, String labelKo) {
             this.label = label;
+            this.labelKo = labelKo;
         }
 
         public String label() {
             return label;
+        }
+
+        public String labelKo() {
+            return labelKo;
         }
     }
 
@@ -87,6 +106,7 @@ public final class FormatCapabilities implements Serializable {
     private final boolean canWrite;
     private final Map<Feature, Support> features;
     private final String notes;
+    private final Map<String, String> pairNotes;
 
     private FormatCapabilities(Builder builder) {
         this.formatId = builder.formatId;
@@ -96,6 +116,7 @@ public final class FormatCapabilities implements Serializable {
         this.canWrite = builder.canWrite;
         this.features = Immutables.mapCopyOf(builder.features);
         this.notes = builder.notes;
+        this.pairNotes = Immutables.mapCopyOf(builder.pairNotes);
     }
 
     public static Builder builder(String formatId, String displayName) {
@@ -136,6 +157,25 @@ public final class FormatCapabilities implements Serializable {
 
     public String notes() {
         return notes;
+    }
+
+    /**
+     * Notes that only apply when writing <em>to</em> a particular other format.
+     *
+     * <p>Some losses are a property of the pair rather than of either format on
+     * its own. An mdv chart is a live chart in mdv and a picture in DOCX: DOCX
+     * has not lost anything it claims to support, and mdv has not failed to
+     * export — but the user has stopped being able to edit the chart, and only
+     * the pair can say so.
+     *
+     * @return target format id to note
+     */
+    public Map<String, String> pairNotes() {
+        return pairNotes;
+    }
+
+    public String pairNote(String targetFormatId) {
+        return pairNotes.get(targetFormatId);
     }
 
     /**
@@ -216,6 +256,7 @@ public final class FormatCapabilities implements Serializable {
         private boolean canRead = true;
         private boolean canWrite = true;
         private final Map<Feature, Support> features = new LinkedHashMap<Feature, Support>();
+        private final Map<String, String> pairNotes = new LinkedHashMap<String, String>();
         private String notes;
 
         Builder(String formatId, String displayName) {
@@ -261,6 +302,12 @@ public final class FormatCapabilities implements Serializable {
 
         public Builder notes(String value) {
             this.notes = value;
+            return this;
+        }
+
+        /** A loss that only happens writing to {@code targetFormatId}. */
+        public Builder pairNote(String targetFormatId, String note) {
+            pairNotes.put(targetFormatId, note);
             return this;
         }
 

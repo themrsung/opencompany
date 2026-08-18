@@ -3,12 +3,14 @@ package com.coreintra.documents;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.coreintra.documents.internal.FidelityMatrix;
 import com.coreintra.documents.internal.FormatCapabilities;
 import com.coreintra.documents.internal.FormatRegistry;
 import com.coreintra.documents.internal.InternalDoc;
 import com.coreintra.documents.internal.adapter.DocxAdapter;
 import com.coreintra.documents.internal.adapter.HwpLegacyAdapter;
 import com.coreintra.documents.internal.adapter.HwpxAdapter;
+import com.coreintra.documents.internal.adapter.MdvAdapter;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -34,7 +36,8 @@ class FidelityMatrixTest {
         return new FormatRegistry()
                 .register(new DocxAdapter())
                 .register(new HwpxAdapter())
-                .register(new HwpLegacyAdapter());
+                .register(new HwpLegacyAdapter())
+                .register(new MdvAdapter());
     }
 
     @Nested
@@ -172,6 +175,115 @@ class FidelityMatrixTest {
         }
     }
 
+    @Nested
+    @DisplayName("the matrix as data, for the export dialog")
+    class AsData {
+
+        @Test
+        @DisplayName("answers about a pair, because that is the question a user has")
+        void answersAboutAPair() {
+            FidelityMatrix.Pair pair = registry().fidelityMatrix().pair("hwpx", "docx");
+
+            assertThat(pair.isSupported()).isTrue();
+            assertThat(pair.rows()).hasSize(FormatCapabilities.Feature.values().length);
+            // Both ends are consulted: HWPX degrades merged cells, DOCX does not,
+            // and the pair has to report the worse of the two.
+            assertThat(pair.support(FormatCapabilities.Feature.MERGED_CELLS))
+                    .isEqualTo(FormatCapabilities.Support.DEGRADED);
+        }
+
+        @Test
+        @DisplayName("carries both languages, because Korean is the default locale")
+        void carriesBothLanguages() {
+            FidelityMatrix.Pair pair = registry().fidelityMatrix().pair("docx", "hwpx");
+            assertThat(pair.concerns()).isNotEmpty();
+            for (FidelityMatrix.Row row : pair.concerns()) {
+                assertThat(row.describeKo()).isNotBlank();
+                assertThat(row.describeEn()).isNotBlank();
+                assertThat(row.describeKo()).isNotEqualTo(row.describeEn());
+            }
+        }
+
+        @Test
+        @DisplayName("says mdv has no native DOCX or HWP writer, and what charts become")
+        void mdvRowIsHonestAboutCharts() {
+            FidelityMatrix matrix = registry().fidelityMatrix();
+
+            assertThat(new MdvAdapter().capabilities().notes())
+                    .contains("THERE IS NO NATIVE DOCX OR HWP WRITER")
+                    .contains("mdv → InternalDoc");
+            assertThat(matrix.pair("mdv", "docx").note()).contains("SVG");
+            assertThat(matrix.pair("mdv", "hwpx").note()).contains("PNG");
+        }
+
+        @Test
+        @DisplayName("does what the mdv row says: an unrendered chart is a labelled placeholder")
+        void anUnrenderedChartIsLabelledNotDropped() {
+            // The matrix promises the worker renders charts and that one reaching
+            // the writer unrendered is labelled rather than lost. A note the code
+            // does not honour is the exact drift this whole design exists to
+            // prevent, so it is asserted rather than trusted.
+            byte[] source = ("# 이사회안건\n\n```mdv pie\ntitle: 의결 집계\n---\n구분,표수\n"
+                    + "찬성,4\n```\n").getBytes(StandardCharsets.UTF_8);
+            InternalDoc document = new MdvAdapter().read(source);
+
+            String documentPart = new String(
+                    com.coreintra.documents.ooxml.OoxmlPackage
+                            .read(new DocxAdapter().write(document)).documentPart(),
+                    StandardCharsets.UTF_8);
+
+            assertThat(documentPart).contains("이사회안건");
+            assertThat(documentPart).contains("변환할 수 없는 내용");
+            assertThat(documentPart).contains("pie chart");
+        }
+
+        @Test
+        @DisplayName("marks a read-only target unsupported rather than listing losses")
+        void readOnlyTargetIsUnsupported() {
+            FidelityMatrix.Pair pair = registry().fidelityMatrix().pair("docx", "hwp");
+            assertThat(pair.isSupported()).isFalse();
+            assertThat(pair.unsupportedReason()).contains("read-only");
+        }
+
+        @Test
+        @DisplayName("refuses the PDF profiles the pinned mdv build cannot actually honour")
+        void unhonourableProfilesAreRefused() {
+            // Found by reading the pinned build: `pdf-a-3b` is accepted and does
+            // nothing, and `pdf-ua-1` stamps a conformance claim into a file with
+            // no embedded fonts. A false archival or accessibility claim is worse
+            // than an absent one, so both are refused rather than warned about.
+            java.util.Map<String, com.coreintra.documents.internal.RenderTarget> targets =
+                    new java.util.LinkedHashMap<String,
+                            com.coreintra.documents.internal.RenderTarget>();
+            for (com.coreintra.documents.internal.RenderTarget target
+                    : com.coreintra.documents.internal.RenderTarget.all()) {
+                targets.put(target.id(), target);
+            }
+
+            assertThat(targets.get("pdf-a-3b").isOffered()).isFalse();
+            assertThat(targets.get("pdf-ua-1").isOffered()).isFalse();
+            assertThat(targets.get("pdf-from-mdv").isOffered()).isFalse();
+            assertThat(targets.get("pdf-from-mdv").cautionKo()).contains("한글");
+            assertThat(targets.get("pdf").isOffered()).isTrue();
+            assertThat(targets.get("doc").isOffered()).isTrue();
+
+            for (com.coreintra.documents.internal.RenderTarget target : targets.values()) {
+                assertThat(target.cautionEn()).isNotBlank();
+                assertThat(target.cautionKo()).isNotBlank();
+            }
+        }
+
+        @Test
+        @DisplayName("serialises to JSON the export dialog can render")
+        void serialisesToJson() {
+            String json = registry().fidelityMatrix().toJson();
+            assertThat(json).startsWith("{\"pairs\":[").endsWith("]}");
+            assertThat(json).contains("\"from\":\"mdv\"").contains("\"to\":\"hwpx\"");
+            assertThat(json).contains("\"labelKo\":\"결재란\"");
+            assertThat(json).contains("\"verdictKo\":");
+        }
+    }
+
     @Test
     @DisplayName("regenerates docs/documents/fidelity.md from the adapters")
     void regeneratesFidelityMatrix() throws IOException {
@@ -182,7 +294,10 @@ class FidelityMatrixTest {
                 .contains("DOCX (Word)")
                 .contains("HWPX (한글)")
                 .contains("HWP 5.0 (legacy binary)")
-                .contains("complex-script shaping");
+                .contains("mdv (Markdown Visual)")
+                .contains("complex-script shaping")
+                .contains("Conversions, pair by pair")
+                .contains("THERE IS NO NATIVE DOCX OR HWP WRITER");
 
         File target = resolveRepoFile("docs/documents/fidelity.md");
         Files.write(target.toPath(), markdown.getBytes(StandardCharsets.UTF_8));

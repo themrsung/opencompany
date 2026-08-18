@@ -82,10 +82,48 @@ An uploaded font must reach all three, from the same record:
 |---|---|
 | The conversion worker | fontconfig path `/var/lib/coreintra/fonts`, `fc-cache` refreshed on install — no restart |
 | The browser editor | served as a webfont from the same blob |
-| mdv's PDF exporter | registered into `pdf.fonts` — **mdv will not pick up a CJK face implicitly**, because a full CJK face is 5–20 MB |
+| mdv's PDF exporter | registered into `pdf.fonts` — **mdv will not pick up a CJK face implicitly**, because a full CJK face is 5–20 MB. **Inert against the pinned build: see below.** |
 
 If any two of the three disagree about what a font looks like, the feature is
 broken: WYSIWYG is the whole point.
+
+## What the pinned mdv build cannot do with fonts
+
+The third consumer above is wired and currently does nothing, and pretending
+otherwise would put Korean question marks into an approval trail. Measured
+against the pinned submodule (`vendor/mdv`, commit `c48e3382`):
+
+- **It embeds no font at all.** `packages/render-pdf/src/fonts.ts` says so in as
+  many words: SPEC 28.6's embedded and subsetted faces, `pdf.fonts` for CJK,
+  bidi and HarfBuzz shaping are "None of that is implemented here". The CLI's
+  export path calls the exporter with `fonts: []` and
+  `createStandardFontMetrics()`. Coverage is the PDF standard 14 faces, which
+  is WinAnsi: Latin-1 and a scatter of typographic characters.
+- **`pdf.fonts` is not a key this build reads.** SPEC 28.6 specifies it; the
+  implementation mentions it only in a doc comment. It is not in the CLI's
+  `CONFIG_KEYS` either, so a `--config` file carrying it is reported as an
+  unsupported key and ignored.
+- **A Korean document therefore exports as question marks.** Every codepoint
+  outside WinAnsi is drawn as `?`, reported once as the `MDV5100` *warning*, and
+  the export exits 0. mdv's own fixture corpus states the behaviour plainly.
+  Nothing about the resulting PDF looks wrong to a program.
+- **The archival profiles do not hold either.** `--profile pdf-a-3b` is a silent
+  no-op. `--profile pdf-ua-1` stamps the ISO 14289-1 conformance claim into a
+  file whose fonts are not embedded, which that standard requires — a false
+  accessibility claim, made to the reader least able to check it.
+
+So the conversion worker **refuses** these rather than returning them: an mdv
+PDF export containing non-WinAnsi text, or asking for either archival profile,
+fails the job with a bilingual error naming the codepoints
+(`ops/conversion-worker/mdv-policy.mjs`). Korean documents take the LibreOffice
+path, which embeds fonts properly and is what everything above this section is
+about.
+
+The font-store → `pdf.fonts` plumbing is built as a single named seam so that
+the day a pin implements embedding, one function changes and the third consumer
+starts working. It is deliberately **not** faked in the meantime: a substitution
+we cannot actually make is exactly the silent failure this document exists to
+prevent.
 
 ## Substitution map
 
@@ -104,8 +142,30 @@ the render metadata comparison will correctly report that it did not.
 
 ## Bulk installs on-prem
 
-Mount a directory of fonts at `/var/lib/coreintra/fonts` on the host. They are
-picked up by fontconfig on the next `fc-cache`, but they will show in the font
-manager as `HOST_PROVIDED` with **no acknowledgement recorded** — the
-responsibility question was never asked. For anything a client did not author
-themselves, prefer the upload path so the acknowledgement exists.
+`/var/lib/coreintra/fonts` is the path *inside* both containers, and it is the
+one fontconfig is told about — the worker image writes
+`/etc/fonts/conf.d/99-coreintra.conf` pointing a `<dir>` at it. By default
+`docker-compose.yml` backs it with the shared `font-data` volume, which is how
+the API and the worker end up looking at the same bytes. For a bulk install,
+bind-mount a host directory over that path instead:
+
+```yaml
+# docker-compose.override.yml
+services:
+  conversion-worker:
+    volumes:
+      - /srv/client-fonts:/var/lib/coreintra/fonts:ro
+```
+
+The worker mounts it read-only on purpose: it consumes fonts and never installs
+them, so that every install goes through the API and is audited.
+
+Fonts placed there are picked up by fontconfig on the next `fc-cache`, but they
+show in the font manager as `HOST_PROVIDED` with **no acknowledgement
+recorded** — the responsibility question was never asked. For anything a client
+did not author themselves, prefer the upload path so the acknowledgement exists.
+
+None of this reaches mdv's PDF exporter, for the reason given under "What the
+pinned mdv build cannot do with fonts": that consumer reads no font files at
+all. A bulk install changes what LibreOffice and the browser render, and
+changes nothing about an mdv PDF.

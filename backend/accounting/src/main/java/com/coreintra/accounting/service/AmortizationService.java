@@ -8,6 +8,8 @@ import com.coreintra.accounting.domain.Posting;
 import com.coreintra.businesstime.BusinessInstant;
 import com.coreintra.compat.Immutables;
 import com.coreintra.compat.Texts;
+import com.coreintra.core.permission.PermissionPrincipal;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,17 +29,35 @@ import org.springframework.transaction.annotation.Transactional;
  * a generator posts entries nobody read, against a chart of accounts that has moved on, and the
  * first sign of trouble is a figure in a report that no human ever approved. What a reader needs
  * a year later is what was decided and by whom, which is exactly what the lineage holds.
+ *
+ * <h2>Why a preview is checked at all, and against what</h2>
+ *
+ * <p>{@link #preview} writes nothing, so it could plausibly be free. It is checked against
+ * {@code accounting.batch:create} - the permission for the only thing the result can be used for.
+ * A preview handed to an account that may not post it is a set of sixty ready-made entries in the
+ * hands of somebody who has to ask a colleague to run them, which is how a control gets routed
+ * around socially rather than technically.
  */
 public class AmortizationService {
 
     private final BatchService batches;
+    private final AccountingGate gate;
 
-    public AmortizationService(BatchService batches) {
+    public AmortizationService(BatchService batches, AccountingGate gate) {
         this.batches = batches;
+        this.gate = gate;
     }
 
-    /** Computes the schedule and the entries it implies. Writes nothing. */
-    public Preview preview(Request request) {
+    /**
+     * Computes the schedule and the entries it implies. Writes nothing.
+     *
+     * @param businessDate the date the decision is being taken on; the instalments carry their own
+     *     dates, and each is authorised again on its own when {@link #post} writes them
+     */
+    public Preview preview(PermissionPrincipal caller, String bookId, Request request,
+            LocalDate businessDate) {
+        gate.requireOnBook(caller, AccountingPermissions.BATCH_CREATE, bookId, businessDate,
+                "preview an amortisation schedule for book " + bookId);
         if (request == null) {
             throw new IllegalArgumentException("there is nothing to amortise");
         }
@@ -47,7 +67,7 @@ public class AmortizationService {
                 request.remainderTo, request.postingDay);
 
         List<NewEntry> entries = new ArrayList<NewEntry>();
-        for (AmortizationSchedule.Line line : schedule.lines()) {
+        for (AmortizationSchedule.Instalment line : schedule.instalments()) {
             if (line.amount().isZero()) {
                 // A zero instalment is a posting that says nothing, and Posting refuses it. Better
                 // to say why here than to fail on line 7 of 60 with "a posting cannot be zero".
@@ -76,12 +96,12 @@ public class AmortizationService {
      * the request again would let the schedule be recomputed between the screen and the save.
      */
     @Transactional
-    public Batch post(String bookId, String label, Preview preview, String actorAccountId) {
+    public Batch post(PermissionPrincipal caller, String bookId, String label, Preview preview) {
         if (preview == null) {
             throw new IllegalArgumentException("there is no preview to post");
         }
-        return batches.write(bookId, BatchKind.AMORTIZATION, label, null,
-                preview.generatorParams(), preview.entries(), actorAccountId);
+        return batches.write(caller, bookId, BatchKind.AMORTIZATION, label, null,
+                preview.generatorParams(), preview.entries());
     }
 
     /**

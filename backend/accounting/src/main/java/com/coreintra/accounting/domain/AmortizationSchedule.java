@@ -19,7 +19,7 @@ import java.util.List;
  * on the balance sheet forever, which someone will eventually write off with an entry that
  * explains nothing. So the remainder is not dropped and it is not spread: it is placed on one
  * line, at the {@link Remainder#START start} or the {@link Remainder#END end}, and the choice is
- * the caller's because it is a policy question, not an arithmetic one. The total of the lines
+ * the caller's because it is a policy question, not an arithmetic one. The total of the instalments
  * equals base minus residual to the last digit, always, and that is asserted here rather than
  * hoped for.
  *
@@ -56,16 +56,16 @@ public final class AmortizationSchedule implements Serializable {
     private final int months;
     private final int roundingDigits;
     private final Remainder remainderTo;
-    private final List<Line> lines;
+    private final List<Instalment> instalments;
 
     private AmortizationSchedule(Amount base, Amount residual, int months, int roundingDigits,
-            Remainder remainderTo, List<Line> lines) {
+            Remainder remainderTo, List<Instalment> instalments) {
         this.base = base;
         this.residual = residual;
         this.months = months;
         this.roundingDigits = roundingDigits;
         this.remainderTo = remainderTo;
-        this.lines = Immutables.copyOf(lines);
+        this.instalments = Immutables.copyOf(instalments);
     }
 
     /**
@@ -120,7 +120,7 @@ public final class AmortizationSchedule implements Serializable {
         BigDecimal instalment = amortisable.value().divide(count, roundingDigits, RoundingMode.DOWN);
         BigDecimal remainder = amortisable.value().subtract(instalment.multiply(count));
 
-        List<Line> built = new ArrayList<Line>();
+        List<Instalment> built = new ArrayList<Instalment>();
         Amount running = Amount.ZERO;
         for (int index = 0; index < months; index++) {
             BigDecimal value = instalment;
@@ -134,7 +134,7 @@ public final class AmortizationSchedule implements Serializable {
             LocalDate on = month.atDay(Math.min(postingDay, month.lengthOfMonth()));
             Amount amount = Amount.of(value);
             running = running.add(amount);
-            built.add(new Line(index + 1, on, amount, base.subtract(running)));
+            built.add(new Instalment(index + 1, on, amount, base.subtract(running)));
         }
 
         if (!running.isEqualTo(amortisable)) {
@@ -168,21 +168,29 @@ public final class AmortizationSchedule implements Serializable {
         return remainderTo;
     }
 
-    public List<Line> lines() {
-        return lines;
+    public List<Instalment> instalments() {
+        return instalments;
     }
 
-    /** Base minus residual: what the lines add up to, exactly. */
+    /** Base minus residual: what the instalments add up to, exactly. */
     public Amount total() {
         Amount total = Amount.ZERO;
-        for (Line line : lines) {
-            total = total.add(line.amount());
+        for (Instalment instalment : instalments) {
+            total = total.add(instalment.amount());
         }
         return total;
     }
 
-    /** One instalment. */
-    public static final class Line implements Serializable {
+    /**
+     * One instalment.
+     *
+     * <p>Named for what it is rather than for where it appears. {@code Line} would be shorter and
+     * is what a schedule prints, but a simple name has to be unique across the whole installation
+     * to survive the API contract: the OpenAPI document keys components by simple name, and two
+     * unrelated {@code Line} types collapse into one ambiguous schema that the generated client
+     * then types as {@code unknown}.
+     */
+    public static final class Instalment implements Serializable {
 
         private static final long serialVersionUID = 1L;
 
@@ -191,14 +199,14 @@ public final class AmortizationSchedule implements Serializable {
         private final Amount amount;
         private final Amount carryingAmount;
 
-        Line(int number, LocalDate businessDate, Amount amount, Amount carryingAmount) {
+        Instalment(int number, LocalDate businessDate, Amount amount, Amount carryingAmount) {
             this.number = number;
             this.businessDate = businessDate;
             this.amount = amount;
             this.carryingAmount = carryingAmount;
         }
 
-        /** 1-based, so the fourth line is line 4 in the preview a person signs off. */
+        /** 1-based, so the fourth instalment is number 4 in the preview a person signs off. */
         public int number() {
             return number;
         }
@@ -215,7 +223,7 @@ public final class AmortizationSchedule implements Serializable {
             return amount;
         }
 
-        /** What is left after this line. Ends at exactly the residual. */
+        /** What is left after this instalment. Ends at exactly the residual. */
         public Amount carryingAmount() {
             return carryingAmount;
         }

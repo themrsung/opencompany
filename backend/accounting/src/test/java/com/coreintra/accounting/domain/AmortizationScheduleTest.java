@@ -32,7 +32,7 @@ class AmortizationScheduleTest {
                     Amount.parse("1000000"), Amount.ZERO, JANUARY, 3, 2,
                     AmortizationSchedule.Remainder.END, 28);
 
-            List<AmortizationSchedule.Line> lines = schedule.lines();
+            List<AmortizationSchedule.Instalment> lines = schedule.instalments();
             assertThat(lines).hasSize(3);
             assertThat(lines.get(0).amount().toExactString()).isEqualTo("333333.33");
             assertThat(lines.get(1).amount().toExactString()).isEqualTo("333333.33");
@@ -47,8 +47,8 @@ class AmortizationScheduleTest {
                     Amount.parse("1000000"), Amount.ZERO, JANUARY, 3, 2,
                     AmortizationSchedule.Remainder.START, 28);
 
-            assertThat(schedule.lines().get(0).amount().toExactString()).isEqualTo("333333.34");
-            assertThat(schedule.lines().get(2).amount().toExactString()).isEqualTo("333333.33");
+            assertThat(schedule.instalments().get(0).amount().toExactString()).isEqualTo("333333.34");
+            assertThat(schedule.instalments().get(2).amount().toExactString()).isEqualTo("333333.33");
             assertThat(schedule.total()).isEqualTo(Amount.parse("1000000"));
         }
 
@@ -60,8 +60,8 @@ class AmortizationScheduleTest {
             AmortizationSchedule end = AmortizationSchedule.straightLine(Amount.parse("1200000"),
                     Amount.ZERO, JANUARY, 12, 0, AmortizationSchedule.Remainder.END, 1);
 
-            assertThat(start.lines().get(0).amount()).isEqualTo(Amount.parse("100000"));
-            assertThat(end.lines().get(11).amount()).isEqualTo(Amount.parse("100000"));
+            assertThat(start.instalments().get(0).amount()).isEqualTo(Amount.parse("100000"));
+            assertThat(end.instalments().get(11).amount()).isEqualTo(Amount.parse("100000"));
         }
     }
 
@@ -77,7 +77,7 @@ class AmortizationScheduleTest {
                     AmortizationSchedule.Remainder.END, 28);
 
             assertThat(schedule.total()).isEqualTo(Amount.parse("9000000"));
-            assertThat(schedule.lines().get(6).carryingAmount())
+            assertThat(schedule.instalments().get(6).carryingAmount())
                     .as("what is left on the books when the schedule finishes")
                     .isEqualTo(Amount.parse("1000000"));
         }
@@ -102,7 +102,7 @@ class AmortizationScheduleTest {
                     AmortizationSchedule.Remainder.END, 28);
 
             assertThat(schedule.total()).isEqualTo(Amount.parse("-1000000"));
-            assertThat(schedule.lines().get(2).amount().toExactString()).isEqualTo("-333333.34");
+            assertThat(schedule.instalments().get(2).amount().toExactString()).isEqualTo("-333333.34");
         }
     }
 
@@ -117,11 +117,11 @@ class AmortizationScheduleTest {
                     Amount.parse("300"), Amount.ZERO, JANUARY, 3, 0,
                     AmortizationSchedule.Remainder.END, 31);
 
-            assertThat(schedule.lines().get(0).businessDate()).isEqualTo(LocalDate.of(2026, 1, 31));
-            assertThat(schedule.lines().get(1).businessDate())
+            assertThat(schedule.instalments().get(0).businessDate()).isEqualTo(LocalDate.of(2026, 1, 31));
+            assertThat(schedule.instalments().get(1).businessDate())
                     .as("February has no 31st, and skipping the month would be worse")
                     .isEqualTo(LocalDate.of(2026, 2, 28));
-            assertThat(schedule.lines().get(2).businessDate()).isEqualTo(LocalDate.of(2026, 3, 31));
+            assertThat(schedule.instalments().get(2).businessDate()).isEqualTo(LocalDate.of(2026, 3, 31));
         }
 
         @Test
@@ -131,9 +131,9 @@ class AmortizationScheduleTest {
                     Amount.parse("1200"), Amount.ZERO, YearMonth.of(2026, 11), 3, 0,
                     AmortizationSchedule.Remainder.END, 15);
 
-            assertThat(schedule.lines().get(0).number()).isEqualTo(1);
-            assertThat(schedule.lines().get(2).number()).isEqualTo(3);
-            assertThat(schedule.lines().get(2).businessDate())
+            assertThat(schedule.instalments().get(0).number()).isEqualTo(1);
+            assertThat(schedule.instalments().get(2).number()).isEqualTo(3);
+            assertThat(schedule.instalments().get(2).businessDate())
                     .as("the schedule runs over a year boundary without restarting")
                     .isEqualTo(LocalDate.of(2027, 1, 15));
         }
@@ -179,11 +179,11 @@ class AmortizationScheduleTest {
         AmortizationSchedule schedule = AmortizationSchedule.straightLine(Amount.parse("1000"),
                 Amount.ZERO, JANUARY, 3, 4, AmortizationSchedule.Remainder.END, 1);
 
-        assertThat(schedule.lines().get(0).amount().toExactString()).isEqualTo("333.3333");
-        assertThat(Currency.krw().formatForDisplay(schedule.lines().get(0).amount()))
+        assertThat(schedule.instalments().get(0).amount().toExactString()).isEqualTo("333.3333");
+        assertThat(Currency.krw().formatForDisplay(schedule.instalments().get(0).amount()))
                 .as("displayed rounded")
                 .isEqualTo("333");
-        assertThat(schedule.lines().get(0).amount().toExactString())
+        assertThat(schedule.instalments().get(0).amount().toExactString())
                 .as("stored unchanged by having been displayed")
                 .isEqualTo("333.3333");
         assertThat(schedule.total()).isEqualTo(Amount.parse("1000"));

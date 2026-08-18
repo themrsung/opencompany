@@ -14,8 +14,10 @@ import com.coreintra.accounting.domain.Posting;
 import com.coreintra.accounting.report.LedgerReports;
 import com.coreintra.accounting.support.AccountingDatabaseTestSupport;
 import com.coreintra.accounting.support.AccountingTestApplication;
+import com.coreintra.accounting.support.AccountingTestPermissions;
 import com.coreintra.businesstime.BusinessInstant;
 import com.coreintra.compat.Immutables;
+import com.coreintra.core.permission.PermissionPrincipal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
@@ -61,6 +63,24 @@ class AccountingPersistenceTest {
     private static final LocalDate APRIL = LocalDate.of(2026, 4, 15);
     private static final LocalDate YEAR_END = LocalDate.of(2026, 12, 31);
 
+    /**
+     * The date these tests hand to operations that have no business date of their own — opening a
+     * book, opening an account. The entries carry their own, which is the point of
+     * {@link AccountingPermissionGateTest}; here it only has to be a date.
+     */
+    private static final LocalDate TODAY = LocalDate.of(2026, 3, 1);
+
+    /**
+     * A caller allowed to do everything in the module.
+     *
+     * <p>Whether the gate refuses the wrong caller is a separate question, asked in
+     * {@link AccountingPermissionGateTest}. These tests are about the engine, so the caller is out
+     * of the way — but it is a real principal through the real evaluator, not a bypass, because
+     * there is no bypass to use.
+     */
+    private PermissionPrincipal caller;
+
+    @Autowired private AccountingTestPermissions permissions;
     @Autowired private BookService books;
     @Autowired private ChartOfAccountsService chart;
     @Autowired private JournalService journal;
@@ -79,14 +99,18 @@ class AccountingPersistenceTest {
         jdbc.update("INSERT INTO user_account (id, username, display_name, kind) "
                 + "VALUES (?, ?, ?, 'SERVICE_ACCOUNT') ON CONFLICT (id) DO NOTHING",
                 ACTOR, "accounting-test", "회계 테스트");
+        caller = permissions.accountantWhoMayDoEverything(ACTOR);
 
         // A book per test: account codes are scoped to a book, so nothing leaks between them.
-        bookId = books.openBook(COMPANY, "Test book " + UUID.randomUUID(), Currency.krw()).id();
-        chart.openAccount(bookId, "1100", null, "현금", "Cash", null, false);
-        chart.openAccount(bookId, "1200", null, "매출채권", "Trade receivables", null, false);
-        chart.openAccount(bookId, "3900", null, "이익잉여금", "Retained earnings", null, false);
-        chart.openAccount(bookId, "4100", null, "매출", "Revenue", null, false);
-        chart.openAccount(bookId, "5100", null, "급여", "Salaries", null, false);
+        bookId = books.openBook(caller, COMPANY, "Test book " + UUID.randomUUID(), Currency.krw(),
+                TODAY).id();
+        chart.openAccount(caller, bookId, "1100", null, "현금", "Cash", null, false, TODAY);
+        chart.openAccount(caller, bookId, "1200", null, "매출채권", "Trade receivables", null,
+                false, TODAY);
+        chart.openAccount(caller, bookId, "3900", null, "이익잉여금", "Retained earnings", null,
+                false, TODAY);
+        chart.openAccount(caller, bookId, "4100", null, "매출", "Revenue", null, false, TODAY);
+        chart.openAccount(caller, bookId, "5100", null, "급여", "Salaries", null, false, TODAY);
     }
 
     private NewEntry entry(LocalDate on, String description, Posting... postings) {
@@ -95,10 +119,10 @@ class AccountingPersistenceTest {
     }
 
     private void postASaleAndACost() {
-        journal.post(bookId, entry(MARCH, "외상 매출",
+        journal.post(caller, bookId, entry(MARCH, "외상 매출",
                 Posting.debit("1200", Amount.parse("1000000")),
                 Posting.credit("4100", Amount.parse("1000000"))));
-        journal.post(bookId, entry(APRIL, "3월 급여",
+        journal.post(caller, bookId, entry(APRIL, "3월 급여",
                 Posting.debit("5100", Amount.parse("300000")),
                 Posting.credit("1100", Amount.parse("300000"))));
     }
@@ -107,11 +131,11 @@ class AccountingPersistenceTest {
     @DisplayName("ACCEPTANCE: rounding never occurs on write, all the way down to the column")
     void storedAmountsKeepEveryDigit() {
         String third = "333333.33333333333333";
-        Entry posted = journal.post(bookId, entry(MARCH, "3분할 배부",
+        Entry posted = journal.post(caller, bookId, entry(MARCH, "3분할 배부",
                 Posting.debit("5100", Amount.parse(third)),
                 Posting.credit("1100", Amount.parse(third))));
 
-        assertThat(journal.load(posted.id()).postings().get(0).amount().toExactString())
+        assertThat(journal.load(caller, posted.id()).postings().get(0).amount().toExactString())
                 .as("read back through JPA")
                 .isEqualTo(third);
         assertThat(jdbc.queryForObject("SELECT amount::text FROM journal_posting "
@@ -124,15 +148,15 @@ class AccountingPersistenceTest {
     @DisplayName("ACCEPTANCE: display_decimals never changes a stored value")
     void displayDecimalsAreDisplayOnly() {
         String third = "333333.33333333333333";
-        Entry posted = journal.post(bookId, entry(MARCH, "3분할 배부",
+        Entry posted = journal.post(caller, bookId, entry(MARCH, "3분할 배부",
                 Posting.debit("5100", Amount.parse(third)),
                 Posting.credit("1100", Amount.parse(third))));
 
-        Currency krw = books.currencies(bookId).get(0);
+        Currency krw = books.currencies(caller, bookId, TODAY).get(0);
         assertThat(krw.code()).isEqualTo("KRW");
         assertThat(krw.displayDecimals()).isZero();
 
-        Amount stored = journal.load(posted.id()).postings().get(0).amount();
+        Amount stored = journal.load(caller, posted.id()).postings().get(0).amount();
         assertThat(krw.formatForDisplay(stored)).as("what a screen shows").isEqualTo("333333");
         assertThat(krw.displayHidesPrecision(stored))
                 .as("so the UI must offer the exact figure as well").isTrue();
@@ -141,7 +165,8 @@ class AccountingPersistenceTest {
 
         // And the setting itself is not a write-path input: change it, and the stored figure is
         // the same figure.
-        books.defineCurrency(bookId, new Currency("KRW", "대한민국 원", "South Korean won", "₩", 4));
+        books.defineCurrency(caller, bookId,
+                new Currency("KRW", "대한민국 원", "South Korean won", "₩", 4), TODAY);
         assertThat(jdbc.queryForObject("SELECT amount::text FROM journal_posting "
                 + "WHERE entry_id = ? AND position = 0", String.class, posted.id()))
                 .isEqualTo(third);
@@ -150,12 +175,12 @@ class AccountingPersistenceTest {
     @Test
     @DisplayName("ACCEPTANCE: an unbalanced entry does not exist, so nothing at all is written")
     void unbalancedEntryWritesNothing() {
-        assertThatThrownBy(() -> journal.post(bookId, entry(MARCH, "틀린 전표",
+        assertThatThrownBy(() -> journal.post(caller, bookId, entry(MARCH, "틀린 전표",
                 Posting.debit("5100", Amount.parse("1000000")),
                 Posting.credit("1100", Amount.parse("999999")))))
                 .isInstanceOf(Entry.UnbalancedEntryException.class);
 
-        assertThat(journal.journal(bookId)).isEmpty();
+        assertThat(journal.journal(caller, bookId, TODAY)).isEmpty();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM journal_posting WHERE book_id = ?",
                 Long.class, bookId)).isZero();
     }
@@ -200,14 +225,14 @@ class AccountingPersistenceTest {
                         Posting.debit("5100", Amount.parse("1000")),
                         Posting.credit("1100", Amount.parse("999"))));
 
-        assertThatThrownBy(() -> batches.write(bookId, BatchKind.IMPORT, "3월 수입분", null, null,
-                entries, ACTOR))
+        assertThatThrownBy(() -> batches.write(caller, bookId, BatchKind.IMPORT, "3월 수입분",
+                null, null, entries))
                 .isInstanceOf(Entry.UnbalancedEntryException.class)
                 .hasMessageContaining("entry 2 of 2");
 
-        assertThat(journal.journal(bookId))
+        assertThat(journal.journal(caller, bookId, TODAY))
                 .as("the good first entry must not survive the bad second one").isEmpty();
-        assertThat(batches.list(bookId)).isEmpty();
+        assertThat(batches.list(caller, bookId, TODAY)).isEmpty();
     }
 
     @Test
@@ -216,55 +241,57 @@ class AccountingPersistenceTest {
     void closingBatchExcludedFromIncomeStatement() {
         postASaleAndACost();
 
-        LedgerReports.IncomeStatement before = reports.incomeStatement(bookId,
+        LedgerReports.IncomeStatement before = reports.incomeStatement(caller, bookId,
                 LocalDate.of(2026, 1, 1), YEAR_END);
         assertThat(before.netIncome()).isEqualTo(Amount.parse("700000"));
 
-        Batch closing = batches.write(bookId, BatchKind.CLOSING, "2026 결산", null, null,
+        Batch closing = batches.write(caller, bookId, BatchKind.CLOSING, "2026 결산", null, null,
                 Immutables.listOf(entry(YEAR_END, "손익 대체",
                         Posting.debit("4100", Amount.parse("1000000")),
                         Posting.credit("5100", Amount.parse("300000")),
-                        Posting.credit("3900", Amount.parse("700000")))),
-                ACTOR);
+                        Posting.credit("3900", Amount.parse("700000")))));
         assertThat(closing.kind()).isEqualTo(BatchKind.CLOSING);
 
-        LedgerReports.IncomeStatement after = reports.incomeStatement(bookId,
+        LedgerReports.IncomeStatement after = reports.incomeStatement(caller, bookId,
                 LocalDate.of(2026, 1, 1), YEAR_END);
         assertThat(after.income())
                 .as("the year earned this, and closing it does not unearn it")
                 .isEqualTo(Amount.parse("1000000"));
         assertThat(after.netIncome()).isEqualTo(Amount.parse("700000"));
 
-        assertThat(reports.balanceOf(bookId, chart.account(bookId, "4100"), YEAR_END))
+        assertThat(reports.balanceOf(caller, bookId,
+                chart.account(caller, bookId, "4100", TODAY), YEAR_END))
                 .as("the closing entry did land: revenue is closed out to nil")
                 .isEqualTo(Amount.ZERO);
-        assertThat(reports.trialBalance(bookId, YEAR_END).isBalanced()).isTrue();
+        assertThat(reports.trialBalance(caller, bookId, YEAR_END).isBalanced()).isTrue();
     }
 
     @Test
     @DisplayName("ACCEPTANCE: a voided entry disappears from every report and stays in the journal")
     void voidedEntryLeavesTheReportsAndNotTheJournal() {
         postASaleAndACost();
-        Entry mistake = journal.post(bookId, entry(APRIL, "중복 입력",
+        Entry mistake = journal.post(caller, bookId, entry(APRIL, "중복 입력",
                 Posting.debit("5100", Amount.parse("50000")),
                 Posting.credit("1100", Amount.parse("50000"))));
 
-        journal.voidEntry(mistake.id(), "중복 입력이라 취소", ACTOR,
+        journal.voidEntry(caller, mistake.id(), "중복 입력이라 취소",
                 BusinessInstant.of(APRIL, 17, 30, 0));
 
-        assertThat(reports.incomeStatement(bookId, LocalDate.of(2026, 1, 1), YEAR_END).expense())
+        assertThat(reports.incomeStatement(caller, bookId, LocalDate.of(2026, 1, 1), YEAR_END)
+                .expense())
                 .as("the voided cost is not an expense of the year")
                 .isEqualTo(Amount.parse("300000"));
-        assertThat(reports.trialBalance(bookId, YEAR_END).totalDebits())
+        assertThat(reports.trialBalance(caller, bookId, YEAR_END).totalDebits())
                 .isEqualTo(Amount.parse("1300000"));
-        assertThat(reports.postedEntries(bookId)).extracting(Entry::id)
+        assertThat(reports.postedEntries(caller, bookId, YEAR_END)).extracting(Entry::id)
                 .doesNotContain(mistake.id());
 
-        Entry stillThere = journal.load(mistake.id());
+        Entry stillThere = journal.load(caller, mistake.id());
         assertThat(stillThere.status()).isEqualTo(Entry.EntryStatus.VOID);
-        assertThat(journal.journal(bookId)).extracting(Entry::id).contains(mistake.id());
+        assertThat(journal.journal(caller, bookId, TODAY)).extracting(Entry::id)
+                .contains(mistake.id());
 
-        List<Entry.Revision> trail = journal.revisionsOf(mistake.id());
+        List<Entry.Revision> trail = journal.revisionsOf(caller, mistake.id());
         assertThat(trail).hasSize(1);
         assertThat(trail.get(0).kind()).isEqualTo("VOID");
         assertThat(trail.get(0).reason()).isEqualTo("중복 입력이라 취소");
@@ -275,35 +302,36 @@ class AccountingPersistenceTest {
     @Test
     @DisplayName("voiding without a reason is refused, and the entry stays posted")
     void voidingNeedsAReason() {
-        Entry posted = journal.post(bookId, entry(MARCH, "매출",
+        Entry posted = journal.post(caller, bookId, entry(MARCH, "매출",
                 Posting.debit("1200", Amount.parse("1000")),
                 Posting.credit("4100", Amount.parse("1000"))));
 
-        assertThatThrownBy(() -> journal.voidEntry(posted.id(), "   ", ACTOR,
+        assertThatThrownBy(() -> journal.voidEntry(caller, posted.id(), "   ",
                 BusinessInstant.of(MARCH, 10, 0, 0)))
                 .isInstanceOf(IllegalArgumentException.class);
 
-        assertThat(journal.load(posted.id()).status()).isEqualTo(Entry.EntryStatus.POSTED);
-        assertThat(journal.revisionsOf(posted.id())).isEmpty();
+        assertThat(journal.load(caller, posted.id()).status()).isEqualTo(Entry.EntryStatus.POSTED);
+        assertThat(journal.revisionsOf(caller, posted.id())).isEmpty();
     }
 
     @Test
     @DisplayName("a correction is a numbered revision with a reason and the state before it")
     void correctionKeepsThePreState() {
-        Entry posted = journal.post(bookId, entry(MARCH, "매출",
+        Entry posted = journal.post(caller, bookId, entry(MARCH, "매출",
                 Posting.debit("1200", Amount.parse("100000")),
                 Posting.credit("4100", Amount.parse("100000"))));
 
-        Entry corrected = journal.correct(posted.id(), "매출 (금액 정정)", Immutables.listOf(
+        Entry corrected = journal.correct(caller, posted.id(), "매출 (금액 정정)", Immutables.listOf(
                 Posting.debit("1200", Amount.parse("120000")),
                 Posting.credit("4100", Amount.parse("120000"))),
-                "세금계산서 금액과 불일치", ACTOR, BusinessInstant.of(APRIL, 9, 0, 0));
+                "세금계산서 금액과 불일치", BusinessInstant.of(APRIL, 9, 0, 0));
 
         assertThat(corrected.totalDebits()).isEqualTo(Amount.parse("120000"));
-        assertThat(journal.load(posted.id()).postings()).hasSize(2);
-        assertThat(journal.load(posted.id()).totalDebits()).isEqualTo(Amount.parse("120000"));
+        assertThat(journal.load(caller, posted.id()).postings()).hasSize(2);
+        assertThat(journal.load(caller, posted.id()).totalDebits())
+                .isEqualTo(Amount.parse("120000"));
 
-        List<Entry.Revision> trail = journal.revisionsOf(posted.id());
+        List<Entry.Revision> trail = journal.revisionsOf(caller, posted.id());
         assertThat(trail).hasSize(1);
         assertThat(trail.get(0).number()).isEqualTo(1);
         assertThat(trail.get(0).kind()).isEqualTo("UPDATE");
@@ -311,23 +339,25 @@ class AccountingPersistenceTest {
         assertThat(trail.get(0).preStateSnapshot())
                 .as("the figure that was wrong, kept where a reader can see it")
                 .contains("100000");
-        assertThat(reports.balanceOf(bookId, chart.account(bookId, "4100"), YEAR_END))
+        assertThat(reports.balanceOf(caller, bookId,
+                chart.account(caller, bookId, "4100", TODAY), YEAR_END))
                 .isEqualTo(Amount.parse("120000"));
     }
 
     @Test
     @DisplayName("only leaves are postable, and the database says so even without the service")
     void onlyLeavesArePostable() {
-        chart.openAccount(bookId, "1300", null, "재고자산", "Inventory", null, false);
-        chart.openAccount(bookId, "1310", "1300", "원재료", "Raw materials", null, false);
+        chart.openAccount(caller, bookId, "1300", null, "재고자산", "Inventory", null, false, TODAY);
+        chart.openAccount(caller, bookId, "1310", "1300", "원재료", "Raw materials", null,
+                false, TODAY);
 
-        assertThatThrownBy(() -> journal.post(bookId, entry(MARCH, "부모 계정 전표",
+        assertThatThrownBy(() -> journal.post(caller, bookId, entry(MARCH, "부모 계정 전표",
                 Posting.debit("1300", Amount.parse("1000")),
                 Posting.credit("1100", Amount.parse("1000")))))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("has child accounts");
 
-        Entry good = journal.post(bookId, entry(MARCH, "원재료 매입",
+        Entry good = journal.post(caller, bookId, entry(MARCH, "원재료 매입",
                 Posting.debit("1310", Amount.parse("1000")),
                 Posting.credit("1100", Amount.parse("1000"))));
 
@@ -343,35 +373,36 @@ class AccountingPersistenceTest {
     @Test
     @DisplayName("an account that already carries postings cannot be turned into a parent")
     void anAccountWithPostingsCannotAdoptAChild() {
-        journal.post(bookId, entry(MARCH, "급여",
+        journal.post(caller, bookId, entry(MARCH, "급여",
                 Posting.debit("5100", Amount.parse("1000")),
                 Posting.credit("1100", Amount.parse("1000"))));
 
-        assertThatThrownBy(() -> chart.openAccount(bookId, "5110", "5100", "상여", "Bonus", null,
-                false))
+        assertThatThrownBy(() -> chart.openAccount(caller, bookId, "5110", "5100", "상여",
+                "Bonus", null, false, TODAY))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("subtotal");
 
-        assertThat(chart.chart(bookId).account("5100").isPostable())
+        assertThat(chart.chart(caller, bookId, TODAY).account("5100").isPostable())
                 .as("and the refusal left the account exactly as it was").isTrue();
     }
 
     @Test
     @DisplayName("a retired account keeps its history and takes no new postings")
     void retirementPreservesHistory() {
-        journal.post(bookId, entry(MARCH, "급여",
+        journal.post(caller, bookId, entry(MARCH, "급여",
                 Posting.debit("5100", Amount.parse("250000")),
                 Posting.credit("1100", Amount.parse("250000"))));
 
-        chart.retireAccount(bookId, "5100");
+        chart.retireAccount(caller, bookId, "5100", TODAY);
 
-        assertThatThrownBy(() -> journal.post(bookId, entry(APRIL, "4월 급여",
+        assertThatThrownBy(() -> journal.post(caller, bookId, entry(APRIL, "4월 급여",
                 Posting.debit("5100", Amount.parse("250000")),
                 Posting.credit("1100", Amount.parse("250000")))))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("retired");
 
-        assertThat(reports.balanceOf(bookId, chart.account(bookId, "5100"), YEAR_END))
+        assertThat(reports.balanceOf(caller, bookId,
+                chart.account(caller, bookId, "5100", TODAY), YEAR_END))
                 .as("last month's figure is untouched by this month's decision")
                 .isEqualTo(Amount.parse("250000"));
     }
@@ -379,12 +410,13 @@ class AccountingPersistenceTest {
     @Test
     @DisplayName("account attributes resolve by nearest ancestor over the stored chart")
     void attributesResolveByNearestAncestor() {
-        chart.openAccount(bookId, "1400", null, "투자자산", "Investments", null, false);
-        chart.openAccount(bookId, "1410", "1400", "장기예금", "Long-term deposits", null, false);
-        chart.describeAccount(bookId, "1400", ChartOfAccounts.Classification.INVESTING,
-                ChartOfAccounts.Category.INVESTMENT);
+        chart.openAccount(caller, bookId, "1400", null, "투자자산", "Investments", null, false, TODAY);
+        chart.openAccount(caller, bookId, "1410", "1400", "장기예금", "Long-term deposits", null,
+                false, TODAY);
+        chart.describeAccount(caller, bookId, "1400", ChartOfAccounts.Classification.INVESTING,
+                ChartOfAccounts.Category.INVESTMENT, TODAY);
 
-        ChartOfAccounts stored = chart.chart(bookId);
+        ChartOfAccounts stored = chart.chart(caller, bookId, TODAY);
         assertThat(stored.classificationOf("1410"))
                 .isEqualTo(ChartOfAccounts.Classification.INVESTING);
         assertThat(stored.categoryOf("1410")).isEqualTo(ChartOfAccounts.Category.INVESTMENT);
@@ -396,15 +428,16 @@ class AccountingPersistenceTest {
     @Test
     @DisplayName("a foreign-currency posting balances in the base currency at the supplied rate")
     void foreignCurrencyBalancesInBase() {
-        books.defineCurrency(bookId, Currency.usd());
-        chart.openAccount(bookId, "1150", null, "외화예금", "FX deposits", "USD", false);
+        books.defineCurrency(caller, bookId, Currency.usd(), TODAY);
+        chart.openAccount(caller, bookId, "1150", null, "외화예금", "FX deposits", "USD", false, TODAY);
 
-        Entry posted = journal.post(bookId, entry(MARCH, "달러 입금", Posting.foreignCurrency("1150",
+        Entry posted = journal.post(caller, bookId, entry(MARCH, "달러 입금",
+                Posting.foreignCurrency("1150",
                 Amount.parse("1000"), "USD", Amount.parse("1320000"),
                 new java.math.BigDecimal("1320")),
                 Posting.credit("1100", Amount.parse("1320000"))));
 
-        Posting stored = journal.load(posted.id()).postings().get(0);
+        Posting stored = journal.load(caller, posted.id()).postings().get(0);
         assertThat(stored.amount()).isEqualTo(Amount.parse("1000"));
         assertThat(stored.baseAmount()).isEqualTo(Amount.parse("1320000"));
         assertThat(stored.rate()).isEqualByComparingTo(new java.math.BigDecimal("1320"));
@@ -414,80 +447,81 @@ class AccountingPersistenceTest {
     @Test
     @DisplayName("a 거래처 travels with the posting it was recorded on")
     void clientDimensionSurvivesTheRoundTrip() {
-        String clientId = books.registerClient(bookId, "㈜테스트상사", "월말 결제").id();
+        String clientId = books.registerClient(caller, bookId, "㈜테스트상사", "월말 결제", TODAY).id();
 
-        Entry posted = journal.post(bookId, entry(MARCH, "외상 매출",
+        Entry posted = journal.post(caller, bookId, entry(MARCH, "외상 매출",
                 Posting.debit("1200", Amount.parse("500000")).withClient(clientId),
                 Posting.credit("4100", Amount.parse("500000"))));
 
-        assertThat(journal.load(posted.id()).postings().get(0).clientId()).isEqualTo(clientId);
-        assertThat(journal.load(posted.id()).postings().get(1).clientId()).isNull();
+        assertThat(journal.load(caller, posted.id()).postings().get(0).clientId())
+                .isEqualTo(clientId);
+        assertThat(journal.load(caller, posted.id()).postings().get(1).clientId()).isNull();
     }
 
     @Test
     @DisplayName("amortisation previews without writing, and posts only when a person says so")
     void amortizationPreviewsThenPosts() {
-        chart.openAccount(bookId, "1500", null, "선급비용", "Prepaid expenses", null, false);
+        chart.openAccount(caller, bookId, "1500", null, "선급비용", "Prepaid expenses", null,
+                false, TODAY);
         AmortizationService.Request request = new AmortizationService.Request("5100", "1500",
                 Amount.parse("1000000"), Amount.ZERO, YearMonth.of(2026, 1), 3, 2,
                 AmortizationSchedule.Remainder.END, 28, 32400, "보험료 상각", null);
 
-        AmortizationService.Preview preview = amortization.preview(request);
+        AmortizationService.Preview preview = amortization.preview(caller, bookId, request, TODAY);
         assertThat(preview.entries()).hasSize(3);
-        assertThat(journal.journal(bookId))
+        assertThat(journal.journal(caller, bookId, TODAY))
                 .as("a preview is a calculation, not a write").isEmpty();
 
-        Batch batch = amortization.post(bookId, "보험료 상각 2026", preview, ACTOR);
+        Batch batch = amortization.post(caller, bookId, "보험료 상각 2026", preview);
 
-        List<Entry> written = batches.entriesOf(batch.id());
+        List<Entry> written = batches.entriesOf(caller, batch.id(), TODAY);
         assertThat(written).hasSize(3);
         assertThat(batch.kind()).isEqualTo(BatchKind.AMORTIZATION);
-        assertThat(batches.find(batch.id()).get().generatorParams())
+        assertThat(batches.find(caller, batch.id(), TODAY).get().generatorParams())
                 .as("lineage, stored as text and never re-executed")
                 .contains("\"baseAmount\":\"1000000\"")
                 .contains("\"remainderTo\":\"END\"")
                 .contains("\"neverReExecuted\":true");
 
-        assertThat(reports.balanceOf(bookId, chart.account(bookId, "5100"),
+        assertThat(reports.balanceOf(caller, bookId, chart.account(caller, bookId, "5100", TODAY),
                 LocalDate.of(2026, 3, 31)))
                 .as("the schedule recognises the whole amount, to the last sub-unit")
                 .isEqualTo(Amount.parse("1000000"));
-        assertThat(reports.trialBalance(bookId, YEAR_END).isBalanced()).isTrue();
+        assertThat(reports.trialBalance(caller, bookId, YEAR_END).isBalanced()).isTrue();
     }
 
     @Test
     @DisplayName("a batch is voidable as a unit, and its entries stay in the journal")
     void batchVoidsAsAUnit() {
-        Batch batch = batches.write(bookId, BatchKind.RECURRING, "월 정기 지급", null, null,
+        Batch batch = batches.write(caller, bookId, BatchKind.RECURRING, "월 정기 지급", null, null,
                 Immutables.listOf(
                         entry(MARCH, "임차료",
                                 Posting.debit("5100", Amount.parse("1000")),
                                 Posting.credit("1100", Amount.parse("1000"))),
                         entry(APRIL, "임차료",
                                 Posting.debit("5100", Amount.parse("1000")),
-                                Posting.credit("1100", Amount.parse("1000")))),
-                ACTOR);
+                                Posting.credit("1100", Amount.parse("1000")))));
 
-        int voided = batches.voidBatch(batch.id(), "계약 해지로 전체 취소", ACTOR,
+        int voided = batches.voidBatch(caller, batch.id(), "계약 해지로 전체 취소",
                 BusinessInstant.of(APRIL, 20, 0, 0));
 
         assertThat(voided).isEqualTo(2);
-        assertThat(reports.postedEntries(bookId)).isEmpty();
-        assertThat(journal.journal(bookId)).hasSize(2);
-        for (Entry entry : batches.entriesOf(batch.id())) {
+        assertThat(reports.postedEntries(caller, bookId, YEAR_END)).isEmpty();
+        assertThat(journal.journal(caller, bookId, TODAY)).hasSize(2);
+        for (Entry entry : batches.entriesOf(caller, batch.id(), TODAY)) {
             assertThat(entry.status()).isEqualTo(Entry.EntryStatus.VOID);
-            assertThat(journal.revisionsOf(entry.id())).hasSize(1);
+            assertThat(journal.revisionsOf(caller, entry.id())).hasSize(1);
         }
     }
 
     @Test
     @DisplayName("a book is opened with the seeded currencies, both of them editable")
     void seededCurrencies() {
-        assertThat(books.currencies(bookId)).extracting(Currency::code)
+        assertThat(books.currencies(caller, bookId, TODAY)).extracting(Currency::code)
                 .containsExactly("KRW", "USD");
 
-        books.defineCurrency(bookId, new Currency("XAU", "금", "Gold", "oz", 6));
-        assertThat(books.currencies(bookId)).extracting(Currency::code)
+        books.defineCurrency(caller, bookId, new Currency("XAU", "금", "Gold", "oz", 6), TODAY);
+        assertThat(books.currencies(caller, bookId, TODAY)).extracting(Currency::code)
                 .as("a unit of account need not be money")
                 .containsExactly("KRW", "USD", "XAU");
     }

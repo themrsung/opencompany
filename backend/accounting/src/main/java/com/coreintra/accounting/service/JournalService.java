@@ -10,7 +10,9 @@ import com.coreintra.accounting.persistence.JournalPostingRepository;
 import com.coreintra.accounting.persistence.JournalPostingRow;
 import com.coreintra.businesstime.BusinessInstant;
 import com.coreintra.compat.Immutables;
-import com.coreintra.compat.Texts;
+import com.coreintra.core.permission.PermissionKey;
+import com.coreintra.core.permission.PermissionPrincipal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -35,6 +37,24 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>{@link #correct} records a numbered revision holding the pre-state before it writes the new
  * lines, and {@link #voidEntry} hides an entry from every report while leaving it in the journal.
  * Neither deletes anything a reader might later need to explain a figure.
+ *
+ * <h2>Authorised on the entry's own business date</h2>
+ *
+ * <p>Every method here checks the caller against the book's company <em>as of the business date of
+ * the entry being acted on</em> - not today's. A 3월 entry corrected in 8월 is judged against the
+ * org chart of 3월, so a permission check on a past-dated document keeps answering the same way
+ * after somebody is promoted or moves team. Today's date would make last quarter's ledger
+ * un-auditable the first time anyone changed jobs, which is the failure ADR 0003 exists to prevent.
+ *
+ * <p>{@link #writeAll} checks <em>each</em> entry on its own date rather than the batch on one
+ * date. A forty-entry import spanning a year-end is forty decisions, and collapsing them into one
+ * would let an authority that only existed in December reach into March.
+ *
+ * <h2>The caller is the actor</h2>
+ *
+ * <p>{@code voidEntry} and {@code correct} used to take an {@code actorAccountId} beside the
+ * principal. They no longer do: the correction trail records whoever the evaluator judged, so the
+ * name in the audit trail cannot differ from the name that was authorised.
  */
 public class JournalService {
 
@@ -42,28 +62,36 @@ public class JournalService {
     private final JournalPostingRepository postings;
     private final JournalEntryRevisionRepository revisions;
     private final ChartOfAccountsService chart;
+    private final AccountingGate gate;
 
     public JournalService(JournalEntryRepository entries, JournalPostingRepository postings,
-            JournalEntryRevisionRepository revisions, ChartOfAccountsService chart) {
+            JournalEntryRevisionRepository revisions, ChartOfAccountsService chart,
+            AccountingGate gate) {
         this.entries = entries;
         this.postings = postings;
         this.revisions = revisions;
         this.chart = chart;
+        this.gate = gate;
     }
 
     /** Posts one entry. Reportable immediately. */
     @Transactional
-    public Entry post(String bookId, NewEntry entry) {
-        return writeAll(bookId, null, Immutables.listOf(entry)).get(0);
+    public Entry post(PermissionPrincipal caller, String bookId, NewEntry entry) {
+        return writeAll(caller, bookId, null, Immutables.listOf(entry)).get(0);
     }
 
     /**
      * Writes an entry that is not yet posted. Excluded from every report until it is, and it still
      * has to balance: a draft that could never post is not worth keeping.
+     *
+     * <p>Checked as a post rather than as something weaker. A draft is a proposal that a later
+     * click turns into a figure in the accounts, and an account that may not post should not be
+     * able to leave one waiting for somebody who can.
      */
     @Transactional
-    public Entry draft(String bookId, NewEntry entry) {
+    public Entry draft(PermissionPrincipal caller, String bookId, NewEntry entry) {
         requirePostableAccounts(bookId, entry);
+        requireMayPost(caller, bookId, entry, 1, 1);
         Entry built = Entry.draft(UUID.randomUUID().toString(), bookId, entry.postedAt(),
                 entry.description(), entry.postings());
         writeRows(built);
@@ -78,7 +106,8 @@ public class JournalService {
      *     four-hundred-entry import that says only "does not balance" is unactionable
      */
     @Transactional
-    public List<Entry> writeAll(String bookId, String batchId, List<NewEntry> newEntries) {
+    public List<Entry> writeAll(PermissionPrincipal caller, String bookId, String batchId,
+            List<NewEntry> newEntries) {
         if (newEntries == null || newEntries.isEmpty()) {
             throw new IllegalArgumentException("there are no entries to write");
         }
@@ -87,6 +116,7 @@ public class JournalService {
         for (NewEntry candidate : newEntries) {
             index++;
             requirePostableAccounts(bookId, candidate);
+            requireMayPost(caller, bookId, candidate, index, newEntries.size());
             try {
                 built.add(Entry.post(UUID.randomUUID().toString(), bookId, candidate.postedAt(),
                         candidate.description(), candidate.postings(), batchId));
@@ -101,14 +131,17 @@ public class JournalService {
         return built;
     }
 
-    public Entry load(String entryId) {
-        JournalEntryRow row = entries.findById(entryId)
-                .orElseThrow(() -> new IllegalArgumentException("there is no entry " + entryId));
-        return hydrate(Immutables.listOf(row)).get(0);
+    /** One entry, if the caller may read the book it belongs to as it stood on the entry's date. */
+    public Entry load(PermissionPrincipal caller, String entryId) {
+        Entry entry = entryOf(entryId);
+        requireOnEntry(caller, AccountingPermissions.ENTRY_READ, entry, "read entry " + entryId);
+        return entry;
     }
 
     /** Everything, in business order: drafts, posted entries and voids alike. */
-    public List<Entry> journal(String bookId) {
+    public List<Entry> journal(PermissionPrincipal caller, String bookId, LocalDate businessDate) {
+        gate.requireOnBook(caller, AccountingPermissions.ENTRY_READ, bookId, businessDate,
+                "read the journal of book " + bookId);
         return hydrate(entries.findJournal(bookId));
     }
 
@@ -116,11 +149,28 @@ public class JournalService {
      * The entries reports are built from. Drafts and voids are excluded here, once, rather than in
      * each report - a report added later cannot forget a filter it never had to write.
      */
-    public List<Entry> postedEntries(String bookId) {
+    public List<Entry> postedEntries(PermissionPrincipal caller, String bookId,
+            LocalDate businessDate) {
+        gate.requireOnBook(caller, AccountingPermissions.ENTRY_READ, bookId, businessDate,
+                "read the posted entries of book " + bookId);
+        return postedEntriesOf(bookId);
+    }
+
+    /**
+     * The same set, for a caller this module has already authorised on this book.
+     *
+     * <p>Package-private, and reached only from {@link LedgerReportService} once it has checked
+     * {@code accounting.report:read}. Reports and the journal are deliberately separate
+     * permissions - a manager entitled to the income statement is not thereby entitled to every
+     * memo line behind it - so a report that also demanded {@code accounting.entry:read} would
+     * make the finer grant unusable.
+     */
+    List<Entry> postedEntriesOf(String bookId) {
         return hydrate(entries.findByStatus(bookId, Entry.EntryStatus.POSTED));
     }
 
-    public List<Entry> entriesOfBatch(String batchId) {
+    /** The entries of a batch, for a caller already authorised on the batch's book. */
+    List<Entry> entriesOfBatch(String batchId) {
         return hydrate(entries.findByBatchId(batchId));
     }
 
@@ -132,14 +182,14 @@ public class JournalService {
      * alongside.
      */
     @Transactional
-    public Entry voidEntry(String entryId, String reason, String actorAccountId,
+    public Entry voidEntry(PermissionPrincipal caller, String entryId, String reason,
             BusinessInstant at) {
-        requireActor(actorAccountId);
-        Entry entry = load(entryId);
+        Entry entry = entryOf(entryId);
+        requireOnEntry(caller, AccountingPermissions.ENTRY_VOID, entry, "void entry " + entryId);
         int before = entry.revisions().size();
-        entry.voidEntry(reason, actorAccountId, at);
+        entry.voidEntry(reason, caller.accountId(), at);
         JournalEntryRow row = entries.findById(entryId)
-                .orElseThrow(() -> new IllegalArgumentException("there is no entry " + entryId));
+                .orElseThrow(() -> new NoSuchAccountingRecordException("entry", entryId));
         row.syncFrom(entry);
         entries.save(row);
         saveRevisionsFrom(entry, before);
@@ -154,12 +204,13 @@ public class JournalService {
      * has been touched.
      */
     @Transactional
-    public Entry correct(String entryId, String description, List<Posting> newPostings,
-            String reason, String actorAccountId, BusinessInstant at) {
-        requireActor(actorAccountId);
-        Entry current = load(entryId);
+    public Entry correct(PermissionPrincipal caller, String entryId, String description,
+            List<Posting> newPostings, String reason, BusinessInstant at) {
+        Entry current = entryOf(entryId);
+        requireOnEntry(caller, AccountingPermissions.ENTRY_UPDATE, current,
+                "correct entry " + entryId);
         int before = current.revisions().size();
-        current.recordRevision(reason, actorAccountId, at);
+        current.recordRevision(reason, caller.accountId(), at);
 
         for (Posting posting : newPostings) {
             chart.requirePostable(current.bookId(), posting.accountId());
@@ -171,7 +222,7 @@ public class JournalService {
         postings.deleteByEntryId(entryId);
         writePostingRows(corrected);
         JournalEntryRow row = entries.findById(entryId)
-                .orElseThrow(() -> new IllegalArgumentException("there is no entry " + entryId));
+                .orElseThrow(() -> new NoSuchAccountingRecordException("entry", entryId));
         row.syncFrom(corrected);
         entries.save(row);
         saveRevisionsFrom(corrected, before);
@@ -179,12 +230,45 @@ public class JournalService {
     }
 
     /** The correction trail as stored, not a recomputation of it. */
-    public List<Entry.Revision> revisionsOf(String entryId) {
+    public List<Entry.Revision> revisionsOf(PermissionPrincipal caller, String entryId) {
+        Entry entry = entryOf(entryId);
+        requireOnEntry(caller, AccountingPermissions.ENTRY_READ, entry,
+                "read the correction trail of entry " + entryId);
         List<Entry.Revision> trail = new ArrayList<Entry.Revision>();
         for (JournalEntryRevisionRow row : revisions.findByEntryIdOrderByNumberAsc(entryId)) {
             trail.add(row.toDomain());
         }
         return trail;
+    }
+
+    /** Loads without deciding. Every public caller authorises the entry it gets back. */
+    private Entry entryOf(String entryId) {
+        JournalEntryRow row = entries.findById(AccountingGate.required(entryId, "entryId"))
+                .orElseThrow(() -> new NoSuchAccountingRecordException("entry", entryId));
+        return hydrate(Immutables.listOf(row)).get(0);
+    }
+
+    /** The check that matters: the entry's own business date, never today's. */
+    private void requireOnEntry(PermissionPrincipal caller, PermissionKey key, Entry entry,
+            String description) {
+        gate.requireOnBook(caller, key, entry.bookId(), entry.postedAt().businessDate(),
+                description);
+    }
+
+    /**
+     * @param index which entry of the batch this is, so a refusal in the middle of an import says
+     *     where rather than leaving the caller to bisect four hundred rows
+     */
+    private void requireMayPost(PermissionPrincipal caller, String bookId, NewEntry entry,
+            int index, int total) {
+        if (entry == null || entry.postedAt() == null) {
+            throw new IllegalArgumentException("an entry needs a business instant. Which business "
+                    + "day it falls in decides which period reports it (ADR 0002).");
+        }
+        String where = total == 1 ? "post an entry" : "post entry " + index + " of " + total;
+        gate.requireOnBook(caller, AccountingPermissions.ENTRY_POST, bookId,
+                entry.postedAt().businessDate(),
+                where + " dated " + entry.postedAt().businessDate() + " into book " + bookId);
     }
 
     private void requirePostableAccounts(String bookId, NewEntry entry) {
@@ -218,14 +302,6 @@ public class JournalService {
         }
     }
 
-    private static void requireActor(String actorAccountId) {
-        if (Texts.isBlank(actorAccountId)) {
-            // Stored NOT NULL as well. A correction trail that does not say who is a list of
-            // changes, not an audit trail.
-            throw new IllegalArgumentException("a correction has to say who made it");
-        }
-    }
-
     private List<Entry> hydrate(List<JournalEntryRow> rows) {
         List<Entry> hydrated = new ArrayList<Entry>();
         if (rows.isEmpty()) {
@@ -236,7 +312,7 @@ public class JournalService {
             ids.add(row.id());
         }
         Map<String, List<Posting>> lines = postingsOf(ids);
-        Map<String, List<Entry.Revision>> trails = revisionsOf(ids);
+        Map<String, List<Entry.Revision>> trails = revisionTrailsOf(ids);
         for (JournalEntryRow row : rows) {
             List<Posting> entryPostings = lines.get(row.id());
             if (entryPostings == null) {
@@ -265,7 +341,7 @@ public class JournalService {
         return byEntry;
     }
 
-    private Map<String, List<Entry.Revision>> revisionsOf(Collection<String> entryIds) {
+    private Map<String, List<Entry.Revision>> revisionTrailsOf(Collection<String> entryIds) {
         Map<String, List<Entry.Revision>> byEntry =
                 new LinkedHashMap<String, List<Entry.Revision>>();
         for (JournalEntryRevisionRow row

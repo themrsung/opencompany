@@ -11,6 +11,8 @@ import com.coreintra.accounting.persistence.BookRepository;
 import com.coreintra.accounting.persistence.JournalEntryRepository;
 import com.coreintra.accounting.persistence.JournalEntryRevisionRepository;
 import com.coreintra.accounting.persistence.JournalPostingRepository;
+import com.coreintra.accounting.support.AccountingTestPermissions;
+import com.coreintra.core.permission.PermissionEvaluator;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -39,7 +41,10 @@ class AccountingModuleSwitchTest {
             .withBean(JournalEntryRepository.class, () -> mock(JournalEntryRepository.class))
             .withBean(JournalPostingRepository.class, () -> mock(JournalPostingRepository.class))
             .withBean(JournalEntryRevisionRepository.class,
-                    () -> mock(JournalEntryRevisionRepository.class));
+                    () -> mock(JournalEntryRevisionRepository.class))
+            // Supplied by the application, never by this module: there is one evaluator in the
+            // installation and accounting is a consumer of it.
+            .withBean(PermissionEvaluator.class, () -> new AccountingTestPermissions());
 
     @Test
     @DisplayName("with the module off, not one accounting service is registered")
@@ -53,6 +58,9 @@ class AccountingModuleSwitchTest {
             assertThat(context).doesNotHaveBean(AmortizationService.class);
             assertThat(context).doesNotHaveBean(LedgerReportService.class);
             assertThat(context).doesNotHaveBean(AccountingConfiguration.class);
+            // Including the gate. It holds the evaluator rather than being one, so leaving it
+            // behind would be harmless - and it would also be the first thing to grow a caller.
+            assertThat(context).doesNotHaveBean(AccountingGate.class);
         });
     }
 
@@ -66,6 +74,7 @@ class AccountingModuleSwitchTest {
             assertThat(context).hasSingleBean(BatchService.class);
             assertThat(context).hasSingleBean(AmortizationService.class);
             assertThat(context).hasSingleBean(LedgerReportService.class);
+            assertThat(context).hasSingleBean(AccountingGate.class);
         });
     }
 

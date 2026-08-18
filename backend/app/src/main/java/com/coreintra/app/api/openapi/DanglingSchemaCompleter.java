@@ -112,6 +112,30 @@ public class DanglingSchemaCompleter implements OpenApiCustomiser {
             }
         }
 
+        // Last resort, and bounded on purpose: the DTO packages only, and only
+        // when exactly one class carries the name. A type can sit two levels
+        // inside a payload that a ResponseEntity<Object> handler names solely in
+        // an annotation, and neither walk above reaches it. Restricting the
+        // search to com.coreintra.app.api keeps this from becoming the
+        // classpath-wide name guess it must not be, and uniqueness keeps it from
+        // choosing between two same-named DTOs.
+        Set<String> afterGraph = danglingNames(openApi);
+        if (!afterGraph.isEmpty()) {
+            Map<String, Class<?>> inApiPackages = apiPackageTypes();
+            for (String name : afterGraph) {
+                Class<?> type = inApiPackages.get(name);
+                if (type == null) {
+                    continue;
+                }
+                for (Map.Entry<String, Schema> entry
+                        : new ModelConverters().readAll(new AnnotatedType(type)).entrySet()) {
+                    if (!openApi.getComponents().getSchemas().containsKey(entry.getKey())) {
+                        openApi.getComponents().addSchemas(entry.getKey(), entry.getValue());
+                    }
+                }
+            }
+        }
+
         Set<String> stillMissing = danglingNames(openApi);
         if (!stillMissing.isEmpty()) {
             LOG.warn("OpenAPI document still references {} undefined schema(s): {}",
@@ -138,6 +162,14 @@ public class DanglingSchemaCompleter implements OpenApiCustomiser {
                 for (Type parameter : method.getGenericParameterTypes()) {
                     readInto(all, unwrap(parameter));
                 }
+                // A handler that returns ResponseEntity<Object> — because it
+                // sometimes streams bytes and sometimes returns a view — has no
+                // payload type in its signature at all. The type is named in
+                // the @Schema(implementation = ...) the author wrote instead,
+                // so read it from there.
+                for (Class<?> declared : declaredSchemaTypes(method)) {
+                    readInto(all, declared);
+                }
             }
         }
         return all;
@@ -163,6 +195,12 @@ public class DanglingSchemaCompleter implements OpenApiCustomiser {
                 walkTypes(unwrap(method.getGenericReturnType()), byName, visited, 0);
                 for (Type parameter : method.getGenericParameterTypes()) {
                     walkTypes(unwrap(parameter), byName, visited, 0);
+                }
+                // Same reason as above: a ResponseEntity<Object> handler names
+                // its payload only in an annotation, and the graph below that
+                // payload is where the deepest omissions are.
+                for (Class<?> declared : declaredSchemaTypes(method)) {
+                    walkTypes(declared, byName, visited, 0);
                 }
             }
         }
@@ -225,6 +263,95 @@ public class DanglingSchemaCompleter implements OpenApiCustomiser {
         if (!existing.contains(type)) {
             existing.add(type);
         }
+    }
+
+    /**
+     * Types named in {@code @Schema(implementation = ...)} anywhere on a method.
+     *
+     * <p>Walks the annotation tree rather than looking in the three places these
+     * usually appear — {@code @ApiResponse}, {@code @RequestBody},
+     * {@code @ArraySchema} — because a fourth place is one silent omission
+     * away, and the whole point of this class is to stop silent omissions.
+     */
+    private static Set<Class<?>> declaredSchemaTypes(Method method) {
+        Set<Class<?>> found = new LinkedHashSet<Class<?>>();
+        for (java.lang.annotation.Annotation annotation : method.getAnnotations()) {
+            collectSchemaImplementations(annotation, found, new HashSet<Object>());
+        }
+        return found;
+    }
+
+    private static void collectSchemaImplementations(Object node, Set<Class<?>> into,
+            Set<Object> seen) {
+        if (node == null || !seen.add(node)) {
+            return;
+        }
+        if (node instanceof Object[]) {
+            for (Object element : (Object[]) node) {
+                collectSchemaImplementations(element, into, seen);
+            }
+            return;
+        }
+        if (!(node instanceof java.lang.annotation.Annotation)) {
+            return;
+        }
+        java.lang.annotation.Annotation annotation = (java.lang.annotation.Annotation) node;
+        Class<?> annotationType = annotation.annotationType();
+        for (Method member : annotationType.getDeclaredMethods()) {
+            if (member.getParameterCount() != 0) {
+                continue;
+            }
+            Object value;
+            try {
+                value = member.invoke(annotation);
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                continue;
+            }
+            if (value instanceof Class && "implementation".equals(member.getName())) {
+                Class<?> implementation = (Class<?>) value;
+                if (implementation.getName().startsWith("com.coreintra")) {
+                    into.add(implementation);
+                }
+            } else {
+                collectSchemaImplementations(value, into, seen);
+            }
+        }
+    }
+
+    /** Every class under {@code com.coreintra.app.api}, by simple name, when unique. */
+    private static Map<String, Class<?>> apiPackageTypes() {
+        Map<String, List<Class<?>>> byName = new java.util.LinkedHashMap<String, List<Class<?>>>();
+        org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider scanner =
+                new org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider(false);
+        // A name pattern, not AssignableTypeFilter(Object.class): the type
+        // hierarchy filter stops at java.lang.Object and matches nothing, which
+        // fails as an empty result rather than as an error.
+        scanner.addIncludeFilter(new org.springframework.core.type.filter.RegexPatternTypeFilter(
+                java.util.regex.Pattern.compile(".*")));
+        for (org.springframework.beans.factory.config.BeanDefinition definition
+                : scanner.findCandidateComponents("com.coreintra.app.api")) {
+            String className = definition.getBeanClassName();
+            if (className == null) {
+                continue;
+            }
+            try {
+                Class<?> type = org.springframework.util.ClassUtils.forName(
+                        className, DanglingSchemaCompleter.class.getClassLoader());
+                record(byName, type);
+                for (Class<?> nested : type.getDeclaredClasses()) {
+                    record(byName, nested);
+                }
+            } catch (ClassNotFoundException | LinkageError e) {
+                LOG.trace("not indexable: {}", className);
+            }
+        }
+        Map<String, Class<?>> unique = new java.util.LinkedHashMap<String, Class<?>>();
+        for (Map.Entry<String, List<Class<?>>> entry : byName.entrySet()) {
+            if (entry.getValue().size() == 1) {
+                unique.put(entry.getKey(), entry.getValue().get(0));
+            }
+        }
+        return unique;
     }
 
     private static void readInto(Map<String, Schema> into, Type type) {

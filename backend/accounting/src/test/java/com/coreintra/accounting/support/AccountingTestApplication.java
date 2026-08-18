@@ -4,6 +4,7 @@ import com.coreintra.accounting.service.AccountingConfiguration;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
@@ -29,4 +30,17 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 @EnableJpaRepositories(basePackages = "com.coreintra.accounting")
 @Import(AccountingConfiguration.class)
 public class AccountingTestApplication {
+
+    /**
+     * The evaluator the accounting services check against, here over an in-memory grant table.
+     *
+     * <p>The production one is assembled in the application module from the JPA org and grant
+     * directories, which would drag half the schema into this context. This is the real
+     * {@code DefaultPermissionEvaluator} with test data behind it, exposed as a bean so a test can
+     * grant, withhold and then assert on what was asked.
+     */
+    @Bean
+    public AccountingTestPermissions accountingTestPermissions() {
+        return new AccountingTestPermissions();
+    }
 }

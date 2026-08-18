@@ -48,7 +48,7 @@ class AmortizationScheduleProperties {
                         : AmortizationSchedule.Remainder.END,
                 postingDay);
 
-        assertThat(schedule.lines()).hasSize(months);
+        assertThat(schedule.instalments()).hasSize(months);
         assertThat(schedule.total())
                 .as("the schedule must neither lose nor invent an amount")
                 .isEqualTo(amortisable);
@@ -66,8 +66,8 @@ class AmortizationScheduleProperties {
         Amount residual = residualOf(base, residualPercent);
         Assume.that(!base.subtract(residual).isZero());
 
-        List<AmortizationSchedule.Line> lines = AmortizationSchedule.straightLine(base, residual,
-                START, months, roundingDigits, AmortizationSchedule.Remainder.END, 28).lines();
+        List<AmortizationSchedule.Instalment> lines = AmortizationSchedule.straightLine(base, residual,
+                START, months, roundingDigits, AmortizationSchedule.Remainder.END, 28).instalments();
 
         assertThat(lines.get(lines.size() - 1).carryingAmount())
                 .as("what is left on the books when the last instalment is posted")
@@ -108,7 +108,7 @@ class AmortizationScheduleProperties {
         AmortizationSchedule schedule = AmortizationSchedule.straightLine(base, Amount.ZERO, START,
                 months, roundingDigits, AmortizationSchedule.Remainder.END, 15);
 
-        for (AmortizationSchedule.Line line : schedule.lines()) {
+        for (AmortizationSchedule.Instalment line : schedule.instalments()) {
             assertThat(line.amount().signum())
                     .as("instalment %s of a %s schedule", line.number(), base.toExactString())
                     .isEqualTo(base.signum());

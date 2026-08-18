@@ -8445,6 +8445,25 @@
           }
         }
       },
+      "ApprovalStepApprover" : {
+        "properties" : {
+          "accountId" : {
+            "type" : "string"
+          },
+          "acted" : {
+            "type" : "boolean",
+            "description" : "True once this person has recorded an action on this step."
+          },
+          "displayName" : {
+            "type" : "string",
+            "description" : "The name held at submission, so a later rename does not rewrite a signature that has already been given."
+          },
+          "rankLabel" : {
+            "type" : "string",
+            "description" : "The 직급 held at submission, e.g. 부장."
+          }
+        }
+      },
       "Approver" : {
         "properties" : {
           "accountId" : {
@@ -8723,7 +8742,7 @@
           "lines" : {
             "type" : "array",
             "items" : {
-              "$ref" : "#/components/schemas/Line"
+              "$ref" : "#/components/schemas/DiffLineView"
             }
           },
           "reason" : {
@@ -9503,6 +9522,24 @@
           }
         }
       },
+      "DiffLineView" : {
+        "properties" : {
+          "afterLine" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "beforeLine" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "op" : {
+            "type" : "string"
+          },
+          "text" : {
+            "type" : "string"
+          }
+        }
+      },
       "DocumentVersionView" : {
         "properties" : {
           "authorAccountId" : {
@@ -10183,6 +10220,22 @@
           }
         }
       },
+      "FeatureView" : {
+        "properties" : {
+          "describeEn" : {
+            "type" : "string"
+          },
+          "describeKo" : {
+            "type" : "string"
+          },
+          "feature" : {
+            "type" : "string"
+          },
+          "support" : {
+            "type" : "string"
+          }
+        }
+      },
       "FidelityRowView" : {
         "properties" : {
           "available" : {
@@ -10191,13 +10244,13 @@
           "concerns" : {
             "type" : "array",
             "items" : {
-              "$ref" : "#/components/schemas/Feature"
+              "$ref" : "#/components/schemas/FeatureView"
             }
           },
           "features" : {
             "type" : "array",
             "items" : {
-              "$ref" : "#/components/schemas/Feature"
+              "$ref" : "#/components/schemas/FeatureView"
             }
           },
           "fromDisplayName" : {
@@ -10223,6 +10276,84 @@
           },
           "unsupportedReason" : {
             "type" : "string"
+          }
+        }
+      },
+      "FieldChange" : {
+        "properties" : {
+          "after" : {
+            "$ref" : "#/components/schemas/FieldValueView"
+          },
+          "before" : {
+            "$ref" : "#/components/schemas/FieldValueView"
+          },
+          "change" : {
+            "type" : "string"
+          },
+          "fieldId" : {
+            "type" : "string"
+          }
+        }
+      },
+      "FieldValueView" : {
+        "properties" : {
+          "amount" : {
+            "type" : "string"
+          },
+          "blobSha256" : {
+            "type" : "string"
+          },
+          "currencyCode" : {
+            "type" : "string"
+          },
+          "date" : {
+            "type" : "string"
+          },
+          "fieldId" : {
+            "type" : "string"
+          },
+          "instant" : {
+            "type" : "string"
+          },
+          "labelEn" : {
+            "type" : "string"
+          },
+          "labelKo" : {
+            "type" : "string"
+          },
+          "number" : {
+            "type" : "string"
+          },
+          "refId" : {
+            "type" : "string"
+          },
+          "required" : {
+            "type" : "boolean"
+          },
+          "text" : {
+            "type" : "string"
+          },
+          "type" : {
+            "type" : "string"
+          }
+        }
+      },
+      "FontWarningView" : {
+        "properties" : {
+          "reason" : {
+            "type" : "string"
+          },
+          "requestedFamily" : {
+            "type" : "string"
+          },
+          "resolvedFamily" : {
+            "type" : "string"
+          },
+          "substituted" : {
+            "type" : "boolean"
+          },
+          "unresolved" : {
+            "type" : "boolean"
           }
         }
       },
@@ -10455,6 +10586,24 @@
           },
           "version" : {
             "type" : "string"
+          }
+        }
+      },
+      "InstalmentResponse" : {
+        "properties" : {
+          "amount" : {
+            "type" : "string"
+          },
+          "businessDate" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "carryingAmount" : {
+            "type" : "string"
+          },
+          "number" : {
+            "type" : "integer",
+            "format" : "int32"
           }
         }
       },
@@ -11086,10 +11235,10 @@
           "generatorParams" : {
             "type" : "string"
           },
-          "lines" : {
+          "instalments" : {
             "type" : "array",
             "items" : {
-              "$ref" : "#/components/schemas/ScheduleLineResponse"
+              "$ref" : "#/components/schemas/InstalmentResponse"
             }
           },
           "months" : {
@@ -11394,24 +11543,6 @@
           }
         },
         "required" : [ "reason" ]
-      },
-      "ScheduleLineResponse" : {
-        "properties" : {
-          "amount" : {
-            "type" : "string"
-          },
-          "businessDate" : {
-            "type" : "string",
-            "format" : "date"
-          },
-          "carryingAmount" : {
-            "type" : "string"
-          },
-          "number" : {
-            "type" : "integer",
-            "format" : "int32"
-          }
-        }
       },
       "ScheduledRecognitionResponse" : {
         "properties" : {

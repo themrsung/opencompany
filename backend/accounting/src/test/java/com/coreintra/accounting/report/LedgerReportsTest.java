@@ -178,7 +178,7 @@ class LedgerReportsTest {
         @DisplayName("balances, with net income shown as its own labelled line")
         void balancesWithUnclosedIncome() {
             LedgerReports.BalanceSheet sheet =
-                    LedgerReports.balanceSheet(sampleLedger(), DEC, null);
+                    LedgerReports.balanceSheet(sampleLedger(), DEC);
 
             assertThat(sheet.assets()).isEqualTo(Amount.parse("700000"));
             assertThat(sheet.unclosedNetIncome())
@@ -199,7 +199,7 @@ class LedgerReportsTest {
                     Posting.debit("1100", Amount.parse("1000")),
                     Posting.credit("4100", Amount.parse("1000"))));
 
-            LedgerReports.BalanceSheet sheet = LedgerReports.balanceSheet(entries, DEC, null);
+            LedgerReports.BalanceSheet sheet = LedgerReports.balanceSheet(entries, DEC);
             assertThat(sheet.isBalanced()).isTrue();
             assertThat(sheet.assets()).isEqualTo(Amount.parse("1000"));
             assertThat(sheet.unclosedNetIncome()).isEqualTo(Amount.parse("1000"));

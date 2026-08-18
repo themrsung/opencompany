@@ -4,8 +4,9 @@ import com.coreintra.accounting.domain.Account;
 import com.coreintra.accounting.domain.ChartOfAccounts;
 import com.coreintra.accounting.persistence.AccountRepository;
 import com.coreintra.accounting.persistence.AccountRow;
-import com.coreintra.accounting.persistence.BookRepository;
 import com.coreintra.accounting.persistence.JournalPostingRepository;
+import com.coreintra.core.permission.PermissionPrincipal;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -29,18 +30,26 @@ import org.springframework.transaction.annotation.Transactional;
  *       say so.
  *   <li>Accounts are retired, never deleted, so prior-period reports do not change behind anyone.
  * </ul>
+ *
+ * <h2>The chart has no business date of its own</h2>
+ *
+ * <p>An account is not an event: it does not happen on a day. So the permission checks here take
+ * the business date from the caller rather than from the row, and the caller has to say which date
+ * it means — usually today, but the date of the document being prepared when a back-dated
+ * correction is being set up. {@link com.coreintra.core.permission.PermissionTarget} refuses to
+ * default it, which is what stops that decision being made by accident.
  */
 public class ChartOfAccountsService {
 
     private final AccountRepository accounts;
-    private final BookRepository books;
     private final JournalPostingRepository postings;
+    private final AccountingGate gate;
 
-    public ChartOfAccountsService(AccountRepository accounts, BookRepository books,
-            JournalPostingRepository postings) {
+    public ChartOfAccountsService(AccountRepository accounts, JournalPostingRepository postings,
+            AccountingGate gate) {
         this.accounts = accounts;
-        this.books = books;
         this.postings = postings;
+        this.gate = gate;
     }
 
     /**
@@ -54,10 +63,11 @@ public class ChartOfAccountsService {
      * @throws IllegalStateException if the parent already carries postings
      */
     @Transactional
-    public Account openAccount(String bookId, String id, String parentId, String nameKo,
-            String nameEn, String currencyCode, boolean contra) {
-        books.findById(bookId)
-                .orElseThrow(() -> new IllegalArgumentException("there is no book " + bookId));
+    public Account openAccount(PermissionPrincipal caller, String bookId, String id,
+            String parentId, String nameKo, String nameEn, String currencyCode, boolean contra,
+            LocalDate businessDate) {
+        gate.requireOnBook(caller, AccountingPermissions.ACCOUNT_CREATE, bookId, businessDate,
+                "open account " + id + " in book " + bookId);
         // Built first: the domain constructor is what decides whether the code, the type and the
         // name make an account at all.
         Account account = new Account(id, parentId, nameKo, nameEn, currencyCode, contra);
@@ -75,10 +85,20 @@ public class ChartOfAccountsService {
         return account;
     }
 
-    /** Sets what this account contributes to inheritance. Null for either means "keep inheriting". */
+    /**
+     * Sets what this account contributes to inheritance. Null for either means "keep inheriting".
+     *
+     * <p>Checked as an update rather than a read even though nothing about the money moves:
+     * classification is what puts a payment in the operating or the financing section of the
+     * cash-flow statement, so relabelling one account restates a statement that has already been
+     * published.
+     */
     @Transactional
-    public void describeAccount(String bookId, String id,
-            ChartOfAccounts.Classification classification, ChartOfAccounts.Category category) {
+    public void describeAccount(PermissionPrincipal caller, String bookId, String id,
+            ChartOfAccounts.Classification classification, ChartOfAccounts.Category category,
+            LocalDate businessDate) {
+        gate.requireOnBook(caller, AccountingPermissions.ACCOUNT_UPDATE, bookId, businessDate,
+                "describe account " + id + " in book " + bookId);
         AccountRow row = row(bookId, id);
         row.describeAs(classification, category);
         accounts.save(row);
@@ -86,7 +106,10 @@ public class ChartOfAccountsService {
 
     /** Renaming is always safe: the id, the type and the tree position are untouched. */
     @Transactional
-    public void renameAccount(String bookId, String id, String nameKo, String nameEn) {
+    public void renameAccount(PermissionPrincipal caller, String bookId, String id, String nameKo,
+            String nameEn, LocalDate businessDate) {
+        gate.requireOnBook(caller, AccountingPermissions.ACCOUNT_UPDATE, bookId, businessDate,
+                "rename account " + id + " in book " + bookId);
         AccountRow row = row(bookId, id);
         // Round-trip through the domain so a blank Korean name is refused here too.
         new Account(id, row.parentId(), nameKo, nameEn, row.currencyCode(), row.isContra());
@@ -101,7 +124,10 @@ public class ChartOfAccountsService {
      * is the one thing a ledger must never do.
      */
     @Transactional
-    public void retireAccount(String bookId, String id) {
+    public void retireAccount(PermissionPrincipal caller, String bookId, String id,
+            LocalDate businessDate) {
+        gate.requireOnBook(caller, AccountingPermissions.ACCOUNT_RETIRE, bookId, businessDate,
+                "retire account " + id + " in book " + bookId);
         AccountRow row = row(bookId, id);
         if (row.isRetired()) {
             throw new IllegalStateException("account " + id + " is already retired");
@@ -111,7 +137,25 @@ public class ChartOfAccountsService {
     }
 
     /** Every account in the book, with inheritance resolvable over the whole tree. */
-    public ChartOfAccounts chart(String bookId) {
+    public ChartOfAccounts chart(PermissionPrincipal caller, String bookId,
+            LocalDate businessDate) {
+        gate.requireOnBook(caller, AccountingPermissions.ACCOUNT_READ, bookId, businessDate,
+                "read the chart of accounts of book " + bookId);
+        return chartOf(bookId);
+    }
+
+    /**
+     * The same snapshot, for a caller this module has already authorised.
+     *
+     * <p>Package-private, and reached only from {@link LedgerReportService} once it has checked
+     * {@code accounting.report:read} against the same book. A cash-flow statement needs the
+     * classification of every account it touches, and requiring {@code accounting.account:read}
+     * on top would mean the two permissions had to be granted together everywhere or the report
+     * would fail for half the people entitled to it — which is how a grant of "everything" gets
+     * made. This is not a bypass: no caller reaches it without a decision having been taken on
+     * this book, on this date, by the one evaluator.
+     */
+    ChartOfAccounts chartOf(String bookId) {
         List<AccountRow> rows = accounts.findByBookIdOrderByIdAsc(bookId);
         List<Account> domain = new ArrayList<Account>();
         Map<String, ChartOfAccounts.Attributes> attributes =
@@ -123,7 +167,10 @@ public class ChartOfAccountsService {
         return ChartOfAccounts.of(domain, attributes);
     }
 
-    public Account account(String bookId, String id) {
+    public Account account(PermissionPrincipal caller, String bookId, String id,
+            LocalDate businessDate) {
+        gate.requireOnBook(caller, AccountingPermissions.ACCOUNT_READ, bookId, businessDate,
+                "read account " + id + " in book " + bookId);
         return row(bookId, id).toDomain();
     }
 
@@ -165,7 +212,7 @@ public class ChartOfAccountsService {
 
     private AccountRow row(String bookId, String id) {
         return accounts.findById(new AccountRow.Key(bookId, id))
-                .orElseThrow(() -> new IllegalArgumentException(
+                .orElseThrow(() -> new NoSuchAccountingRecordException("account", id,
                         "book " + bookId + " has no account " + id));
     }
 }

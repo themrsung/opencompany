@@ -5,6 +5,7 @@ import com.coreintra.auth.entity.ApiKey;
 import com.coreintra.auth.repository.ApiKeyRepository;
 import com.coreintra.compat.Immutables;
 import com.coreintra.compat.Texts;
+import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -29,8 +30,25 @@ public class ApiKeyService {
 
     /** {@code ci_} marks the string as ours in a log or a leaked config file. */
     private static final String PREFIX_MARKER = "ci_";
-    private static final int PREFIX_BYTES = 6;
     private static final int SECRET_BYTES = 32;
+
+    /**
+     * Bytes behind the public prefix.
+     *
+     * <p>Six, which is far below the 128-bit floor {@code SecretHasher.randomToken}
+     * enforces — correctly, because that method mints bearer secrets and this is
+     * not one. The prefix is stored in clear precisely so it can be read: it
+     * identifies a key in a log or a config file without revealing it. It needs
+     * to be unique, not unguessable.
+     *
+     * <p>Calling {@code randomToken(6)} here is what the first version did, and
+     * it threw on every single issue call — the feature had never worked end to
+     * end because nothing exercised it. Its own generator, with its own reason
+     * for its own length, is the fix.
+     */
+    private static final int PREFIX_BYTES = 6;
+
+    private static final SecureRandom PREFIX_RANDOM = new SecureRandom();
 
     private final ApiKeyRepository keys;
 
@@ -80,7 +98,7 @@ public class ApiKeyService {
             throw new IllegalArgumentException("give the key a name — an unnamed key is one "
                     + "nobody dares revoke");
         }
-        String prefix = SecretHasher.randomToken(PREFIX_BYTES);
+        String prefix = randomPrefix();
         String secret = SecretHasher.randomToken(SECRET_BYTES);
 
         ApiKey record = new ApiKey(UUID.randomUUID().toString(), accountId, name, prefix,
@@ -135,6 +153,13 @@ public class ApiKeyService {
     @Transactional(readOnly = true)
     public List<ApiKey> activeKeys(String accountId) {
         return keys.findByAccountIdAndRevokedAtIsNull(accountId);
+    }
+
+    /** Short, URL-safe, and not a secret. Unique enough that two keys are told apart. */
+    private static String randomPrefix() {
+        byte[] material = new byte[PREFIX_BYTES];
+        PREFIX_RANDOM.nextBytes(material);
+        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(material);
     }
 
     private static String joinScopes(Set<String> scopes) {

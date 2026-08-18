@@ -80,6 +80,21 @@ jobs:
       - working-directory: frontend
         run: pnpm build
 
+  backup-restore:
+    # §1 asks that restore be proven by a test rather than by a runbook. The
+    # main backend job supplies SPRING_DATASOURCE_URL, under which this test
+    # skips itself with a reason — it runs pg_dump inside the database
+    # container, the way ops/backup.sh does, so it needs Testcontainers to own
+    # the container. Hence its own job with no datasource in the environment.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21", cache: maven }
+      - name: Prove the backup restores, twice, the second time over a populated database
+        working-directory: backend
+        run: ./mvnw -B -pl app -am test -Dtest=BackupRestoreTest -DfailIfNoSpecifiedTests=false
+
   api-client-drift:
     # API types are generated from the backend's OpenAPI spec. Drift between the
     # spec and the committed client fails the build rather than being noticed

@@ -82,6 +82,20 @@ public final class DatabaseTestSupport {
         published = true;
     }
 
+    /**
+     * The running container, or null when the database came from the environment.
+     *
+     * <p>Exposed for the one test that needs to run {@code pg_dump} and
+     * {@code psql} the way {@code ops/backup.sh} does — inside the database
+     * container, with the server's own client tools, rather than against
+     * whatever version happens to be installed on the machine running the
+     * build. A test of the backup that used a different dumper from production
+     * would prove something adjacent to the thing that matters.
+     */
+    public static synchronized PostgreSQLContainer<?> containerOrNull() {
+        return hasExternalDatabase() ? null : container;
+    }
+
     private static synchronized PostgreSQLContainer<?> startContainer() {
         if (container == null) {
             container = new PostgreSQLContainer<>(IMAGE)

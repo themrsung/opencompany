@@ -39,6 +39,19 @@ public class AuthSession {
     @Column(name = "chain_id", nullable = false, length = 36)
     private String chainId;
 
+    /**
+     * Hashed short-lived access token — the one an ordinary request presents.
+     *
+     * <p>Opaque rather than self-validating, so revocation is immediate: a
+     * signed token would keep working until it expired, which would make the
+     * temporary-master "Revoke now" button a promise the system cannot keep.
+     */
+    @Column(name = "access_token_hash", length = 200)
+    private String accessTokenHash;
+
+    @Column(name = "access_expires_at")
+    private OffsetDateTime accessExpiresAt;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
@@ -78,9 +91,30 @@ public class AuthSession {
         return revokedAt == null && now.isBefore(expiresAt);
     }
 
+    /**
+     * True when the access half is still usable.
+     *
+     * <p>Deliberately stricter than {@link #isActive}: a live session with an
+     * expired access token is the ordinary state that triggers a refresh, not
+     * an error.
+     */
+    public boolean isAccessUsable(OffsetDateTime now) {
+        return isActive(now) && accessExpiresAt != null && now.isBefore(accessExpiresAt);
+    }
+
     public void rotate(String newRefreshTokenHash, OffsetDateTime newExpiry) {
         this.refreshTokenHash = newRefreshTokenHash;
         this.expiresAt = newExpiry;
+        this.lastUsedAt = OffsetDateTime.now();
+    }
+
+    /** Written together, always: see the CHECK constraint in V10. */
+    public void issueAccessToken(String hash, OffsetDateTime expiry) {
+        this.accessTokenHash = hash;
+        this.accessExpiresAt = expiry;
+    }
+
+    public void touch() {
         this.lastUsedAt = OffsetDateTime.now();
     }
 
@@ -105,6 +139,14 @@ public class AuthSession {
 
     public String refreshTokenHash() {
         return refreshTokenHash;
+    }
+
+    public String accessTokenHash() {
+        return accessTokenHash;
+    }
+
+    public OffsetDateTime accessExpiresAt() {
+        return accessExpiresAt;
     }
 
     public OffsetDateTime createdAt() {

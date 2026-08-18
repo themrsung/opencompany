@@ -44,11 +44,16 @@ public class SessionService {
         private final String sessionId;
         private final String refreshToken;
         private final OffsetDateTime refreshExpiresAt;
+        private final String accessToken;
+        private final OffsetDateTime accessExpiresAt;
 
-        IssuedSession(String sessionId, String refreshToken, OffsetDateTime refreshExpiresAt) {
+        IssuedSession(String sessionId, String refreshToken, OffsetDateTime refreshExpiresAt,
+                String accessToken, OffsetDateTime accessExpiresAt) {
             this.sessionId = sessionId;
             this.refreshToken = refreshToken;
             this.refreshExpiresAt = refreshExpiresAt;
+            this.accessToken = accessToken;
+            this.accessExpiresAt = accessExpiresAt;
         }
 
         public String sessionId() {
@@ -62,6 +67,15 @@ public class SessionService {
 
         public OffsetDateTime refreshExpiresAt() {
             return refreshExpiresAt;
+        }
+
+        /** Plaintext, short-lived, HttpOnly. What an ordinary request presents. */
+        public String accessToken() {
+            return accessToken;
+        }
+
+        public OffsetDateTime accessExpiresAt() {
+            return accessExpiresAt;
         }
     }
 
@@ -91,9 +105,70 @@ public class SessionService {
                 SecretHasher.hash(secret), expiry);
         session.setUserAgent(truncate(userAgent, 400));
         session.setIpAddress(truncate(ipAddress, 64));
+
+        String accessSecret = mintAccessToken(session, OffsetDateTime.now());
         sessions.save(session);
 
-        return new IssuedSession(sessionId, composeToken(sessionId, secret), expiry);
+        return new IssuedSession(sessionId, composeToken(sessionId, secret), expiry,
+                composeToken(sessionId, accessSecret), session.accessExpiresAt());
+    }
+
+    /**
+     * Puts a fresh access secret on the session and returns the plaintext half.
+     *
+     * <p>Same wire shape as the refresh token, and for the same reason: the
+     * session id travels with it, so verification is a primary-key hit rather
+     * than a scan over every session ever issued. The stored hashes are salted
+     * per row, so they cannot be looked up by hashing what was presented.
+     */
+    private static String mintAccessToken(AuthSession session, OffsetDateTime now) {
+        String accessSecret = SecretHasher.randomToken(TOKEN_BYTES);
+        session.issueAccessToken(SecretHasher.hash(accessSecret), now.plus(ACCESS_TOKEN_LIFETIME));
+        return accessSecret;
+    }
+
+    /**
+     * Resolves the access token an ordinary request presented.
+     *
+     * <p>Checked against the registry on every request rather than validated
+     * from a signature. That is the whole reason the token is opaque: sign-out,
+     * a master's remote sign-out, and the temporary-master "Revoke now" button
+     * all have to take effect on the *next* request, and a self-validating token
+     * would keep working until it expired.
+     *
+     * <p>An expired access token on a live session is the ordinary state that
+     * triggers a refresh, so it throws the same way an unknown one does and the
+     * caller decides whether to refresh — this method never says which of the
+     * reasons applied.
+     *
+     * @throws InvalidSessionException if the token is unknown, tampered with,
+     *         expired or revoked
+     */
+    @Transactional(readOnly = true)
+    public AuthSession authenticate(String presentedAccessToken) {
+        OffsetDateTime now = OffsetDateTime.now();
+        int separator = presentedAccessToken == null ? -1 : presentedAccessToken.indexOf('.');
+        if (separator <= 0) {
+            throw new InvalidSessionException("This session is no longer valid. Please sign in again.");
+        }
+        String sessionId = presentedAccessToken.substring(0, separator);
+        String secret = presentedAccessToken.substring(separator + 1);
+
+        Optional<AuthSession> candidate = sessions.findById(sessionId);
+        if (!candidate.isPresent()) {
+            throw new InvalidSessionException("This session is no longer valid. Please sign in again.");
+        }
+        AuthSession matched = candidate.get();
+        if (matched.accessTokenHash() == null
+                || !SecretHasher.matches(secret, matched.accessTokenHash())
+                || !matched.isAccessUsable(now)) {
+            // No chain revocation here, unlike the refresh path. An access token
+            // that has merely aged out is the normal case many times a day, and
+            // burning the session for it would sign everyone out every fifteen
+            // minutes.
+            throw new InvalidSessionException("This session is no longer valid. Please sign in again.");
+        }
+        return matched;
     }
 
     /**
@@ -165,11 +240,16 @@ public class SessionService {
         matched.rotate(SecretHasher.hash(newSecret), newExpiry);
         matched.setUserAgent(truncate(userAgent, 400));
         matched.setIpAddress(truncate(ipAddress, 64));
+        // The access half rotates with the refresh half. Leaving the old access
+        // token live after a refresh would hand an attacker who captured it a
+        // second window it should not have.
+        String accessSecret = mintAccessToken(matched, now);
         sessions.save(matched);
 
         // The old secret no longer verifies, so presenting it again lands in the
         // mismatch branch above and burns the chain. That is the reuse detection.
-        return new IssuedSession(matched.id(), composeToken(matched.id(), newSecret), newExpiry);
+        return new IssuedSession(matched.id(), composeToken(matched.id(), newSecret), newExpiry,
+                composeToken(matched.id(), accessSecret), matched.accessExpiresAt());
     }
 
     /** Revokes every session in a rotation lineage. */

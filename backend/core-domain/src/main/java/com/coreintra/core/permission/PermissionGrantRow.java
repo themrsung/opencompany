@@ -54,6 +54,22 @@ public class PermissionGrantRow {
     @Column(name = "reason")
     private String reason;
 
+    /**
+     * Set instead of deleting the row.
+     *
+     * <p>"Who could approve this last March, and who took that away?" is the
+     * question an auditor asks, and a deleted row cannot answer it. A revoked
+     * grant is invisible to the evaluator and visible to the explainer.
+     */
+    @Column(name = "revoked_at")
+    private OffsetDateTime revokedAt;
+
+    @Column(name = "revoked_by", length = 36)
+    private String revokedBy;
+
+    @Column(name = "revoked_reason")
+    private String revokedReason;
+
     protected PermissionGrantRow() {
     }
 
@@ -119,5 +135,41 @@ public class PermissionGrantRow {
 
     public OffsetDateTime grantedAt() {
         return grantedAt;
+    }
+
+    public boolean isRevoked() {
+        return revokedAt != null;
+    }
+
+    public OffsetDateTime revokedAt() {
+        return revokedAt;
+    }
+
+    public String revokedBy() {
+        return revokedBy;
+    }
+
+    public String revokedReason() {
+        return revokedReason;
+    }
+
+    /**
+     * Retires the grant.
+     *
+     * <p>The reason is mandatory here and not merely in the service, so that no
+     * later caller can revoke silently. Revoking twice is a no-op rather than an
+     * error: two admins pressing the same button is not a failure, and the first
+     * revocation's reason is the true one.
+     */
+    public void revoke(String byAccountId, String reason) {
+        if (reason == null || reason.trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "revoking a permission needs a reason; it is what the audit trail shows");
+        }
+        if (revokedAt == null) {
+            this.revokedAt = OffsetDateTime.now();
+            this.revokedBy = byAccountId;
+            this.revokedReason = reason;
+        }
     }
 }

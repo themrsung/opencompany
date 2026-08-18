@@ -79,15 +79,10 @@ class OrgPermissionIntegrationTest {
     void seedOrg() {
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
         // Order matters: children before parents.
-        jdbc.execute("delete from permission_grant");
-        jdbc.execute("delete from position_job_function");
-        jdbc.execute("delete from position");
-        jdbc.execute("delete from user_account");
-        jdbc.execute("delete from employee");
-        jdbc.execute("delete from org_unit");
-        jdbc.execute("delete from job_function");
-        jdbc.execute("delete from rank");
-        jdbc.execute("delete from company");
+        // One reset, ordered by the database rather than by hand: every new
+        // table with a foreign key to an account used to break a different
+        // set of these lists, in whichever class happened to run next.
+        DatabaseTestSupport.resetSchema(jdbc);
 
         companyId = id();
         companies.save(new Company(companyId, "acme", "에이스전자", Company.CompanyKind.HEAD_OFFICE));

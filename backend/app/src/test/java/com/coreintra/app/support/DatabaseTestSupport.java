@@ -107,6 +107,68 @@ public final class DatabaseTestSupport {
         return container;
     }
 
+    /**
+     * Tables the migrations themselves populate. Emptying these would leave the
+     * schema present and the installation meaningless — no currencies, no rank
+     * ladder, no attendance statuses — and every test that touched them would
+     * fail somewhere far from the cause.
+     */
+    private static final String KEEP = "'flyway_schema_history', 'accounting_currency', "
+            + "'attendance_status_type', 'job_function', 'leave_policy', "
+            + "'leave_tenure_increment', 'rank', 'temporary_master_switch'";
+
+    /**
+     * Empties every table a test may have written to.
+     *
+     * <h2>Why this exists</h2>
+     *
+     * <p>Test classes were each rolling their own cleanup — {@code delete from
+     * user_account} and a handful of others, in an order that happened to work.
+     * Every new table with a foreign key to an account broke a different set of
+     * them, and the failure appears in whichever class runs next rather than in
+     * the one that added the table. Twelve classes were red for this reason at
+     * once, in four different areas, none of them at fault.
+     *
+     * <p>One statement, one order, decided by the database rather than by
+     * whoever wrote the test.
+     *
+     * <h2>session_replication_role</h2>
+     *
+     * <p>Set to {@code replica} for the duration, which suspends foreign-key
+     * enforcement <em>and</em> user triggers. Both matter: the first means the
+     * deletion order does not have to be maintained by hand, and the second is
+     * the only way past {@code audit_log}'s append-only trigger, which refuses
+     * a delete by design.
+     *
+     * <p>{@code DELETE}, not {@code TRUNCATE}. TRUNCATE refuses outright on any
+     * table referenced by a foreign key, and that check is structural rather
+     * than trigger-based, so the replica role does not lift it; TRUNCATE CASCADE
+     * would lift it by also emptying the tables the migrations seed. On tables
+     * this size the difference in speed is not measurable.
+     *
+     * <p>That trigger is not being weakened. It is restored before the method
+     * returns, and the production guarantee — that no account can erase the
+     * audit log — is unaffected: this requires a superuser session on the
+     * database itself, which is not a route any account of the application has.
+     */
+    public static void resetSchema(org.springframework.jdbc.core.JdbcTemplate jdbc) {
+        java.util.List<String> tables = jdbc.queryForList(
+                "SELECT quote_ident(tablename) FROM pg_tables "
+                        + "WHERE schemaname = 'public' AND tablename NOT IN (" + KEEP + ")",
+                String.class);
+        if (tables.isEmpty()) {
+            return;
+        }
+        jdbc.execute("SET session_replication_role = 'replica'");
+        try {
+            for (String table : tables) {
+                jdbc.execute("DELETE FROM " + table);
+            }
+        } finally {
+            jdbc.execute("SET session_replication_role = 'origin'");
+        }
+    }
+
     private static synchronized boolean isDockerAvailable() {
         if (dockerAvailable == null) {
             try {

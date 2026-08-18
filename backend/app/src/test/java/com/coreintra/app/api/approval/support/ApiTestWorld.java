@@ -1,5 +1,6 @@
 package com.coreintra.app.api.approval.support;
 
+import com.coreintra.app.support.DatabaseTestSupport;
 import com.coreintra.approval.domain.ApprovalStepKind;
 import com.coreintra.approval.domain.RepresentationMode;
 import com.coreintra.approval.domain.RoleExpression;
@@ -153,32 +154,10 @@ public class ApiTestWorld {
      */
     public void reset() {
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
-        jdbc.execute("delete from employment_rules_acknowledgement");
-        jdbc.execute("delete from employment_rules_representative");
-        jdbc.execute("delete from employment_rules_section");
-        jdbc.execute("delete from employment_rules");
-        jdbc.execute("delete from approval_action");
-        jdbc.execute("delete from approval_step_approver");
-        jdbc.execute("delete from approval_step");
-        jdbc.execute("delete from approval_document");
-        jdbc.execute("delete from approval_template_step");
-        jdbc.execute("delete from approval_line_template");
-        jdbc.execute("delete from company_representation");
-        jdbc.execute("delete from attendance_record");
-        jdbc.execute("delete from attendance_status_type");
-        jdbc.execute("delete from leave_transaction");
-        jdbc.execute("delete from leave_tenure_increment");
-        jdbc.execute("delete from leave_policy");
-        jdbc.execute("delete from idempotency_key");
-        jdbc.execute("delete from auth_session");
-        jdbc.execute("delete from permission_grant");
-        jdbc.execute("delete from position_job_function");
-        jdbc.execute("delete from position");
-        jdbc.execute("delete from user_account");
-        jdbc.execute("delete from employee");
-        jdbc.execute("delete from org_unit");
-        jdbc.execute("delete from rank");
-        jdbc.execute("delete from company");
+        // One reset, ordered by the database rather than by hand: every new
+        // table with a foreign key to an account used to break a different
+        // set of these lists, in whichever class happened to run next.
+        DatabaseTestSupport.resetSchema(jdbc);
 
         companyId = id();
         companies.save(new Company(companyId, "acme", "에이스전자",

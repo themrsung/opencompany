@@ -59,16 +59,10 @@ class AuthenticationIntegrationTest {
     @BeforeEach
     void createAccount() {
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
-        jdbc.execute("delete from consumed_time_step");
-        jdbc.execute("delete from recovery_code");
-        jdbc.execute("delete from totp_credential");
-        jdbc.execute("delete from auth_session");
-        jdbc.execute("delete from api_key");
-        jdbc.execute("delete from auth_attempt");
-        jdbc.execute("delete from permission_grant");
-        jdbc.execute("delete from position_job_function");
-        jdbc.execute("delete from position");
-        jdbc.execute("delete from user_account");
+        // One reset, ordered by the database rather than by hand: every new
+        // table with a foreign key to an account used to break a different
+        // set of these lists, in whichever class happened to run next.
+        DatabaseTestSupport.resetSchema(jdbc);
 
         UserAccount account = new UserAccount(
                 UUID.randomUUID().toString(), USERNAME, "김민준", UserAccount.AccountKind.USER);

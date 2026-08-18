@@ -48,6 +48,9 @@ import org.testcontainers.containers.PostgreSQLContainer;
 @ActiveProfiles("test")
 class BackupRestoreTest {
 
+    /** Inside the container, so the dump never crosses the host boundary. */
+    private static final String DUMP_PATH = "/tmp/coreintra-backup.sql";
+
     @Autowired
     private DataSource dataSource;
 
@@ -77,9 +80,15 @@ class BackupRestoreTest {
                     .as("the full schema should be present before a dump is worth taking")
                     .isGreaterThan(20);
 
-            String dump = exec(postgres, null, "pg_dump", "--username=" + user,
-                    "--dbname=" + database, "--clean", "--if-exists", "--no-owner",
-                    "--no-privileges");
+            // Dumped to a file inside the container, exactly as ops/backup.sh
+            // does, and never carried across the host boundary. Testcontainers
+            // cannot feed stdin to execInContainer, and copying the file back
+            // and forth would be a different operation from the one production
+            // performs.
+            exec(postgres, "pg_dump", "--username=" + user, "--dbname=" + database,
+                    "--clean", "--if-exists", "--no-owner", "--no-privileges",
+                    "--file=" + DUMP_PATH);
+            String dump = exec(postgres, "cat", DUMP_PATH);
 
             assertThat(dump)
                     .as("a dump that cannot drop what it is replacing cannot be restored over a "
@@ -91,7 +100,7 @@ class BackupRestoreTest {
 
             psql(postgres, user, "postgres", "CREATE DATABASE \"" + scratch + "\"");
             try {
-                restore(postgres, user, scratch, dump);
+                restore(postgres, user, scratch);
                 assertThat(tableCount(postgres, user, scratch))
                         .as("the first restore must bring the whole schema")
                         .isEqualTo(expectedTables);
@@ -102,7 +111,7 @@ class BackupRestoreTest {
                 psql(postgres, user, scratch, "DELETE FROM company WHERE id = '" + marker + "'");
                 assertThat(markerCount(postgres, user, scratch, marker)).isZero();
 
-                restore(postgres, user, scratch, dump);
+                restore(postgres, user, scratch);
 
                 assertThat(markerCount(postgres, user, scratch, marker))
                         .as("restoring over a populated database must still bring the row back")
@@ -129,10 +138,10 @@ class BackupRestoreTest {
      * leading DROPs legitimately fail for objects that are not there yet,
      * exactly as they do in a real restore.
      */
-    private static void restore(PostgreSQLContainer<?> postgres, String user, String database,
-            String dump) throws Exception {
-        exec(postgres, dump, "psql", "--username=" + user, "--dbname=" + database, "--quiet",
-                "--set", "ON_ERROR_STOP=0");
+    private static void restore(PostgreSQLContainer<?> postgres, String user, String database)
+            throws Exception {
+        exec(postgres, "psql", "--username=" + user, "--dbname=" + database, "--quiet",
+                "--set", "ON_ERROR_STOP=0", "--file=" + DUMP_PATH);
     }
 
     private static int tableCount(PostgreSQLContainer<?> postgres, String user, String database)
@@ -150,13 +159,13 @@ class BackupRestoreTest {
 
     private static String query(PostgreSQLContainer<?> postgres, String user, String database,
             String sql) throws Exception {
-        return exec(postgres, null, "psql", "--username=" + user, "--dbname=" + database,
+        return exec(postgres, "psql", "--username=" + user, "--dbname=" + database,
                 "--tuples-only", "--no-align", "--command", sql).trim();
     }
 
     private static void psql(PostgreSQLContainer<?> postgres, String user, String database,
             String sql) throws Exception {
-        exec(postgres, null, "psql", "--username=" + user, "--dbname=" + database, "--quiet",
+        exec(postgres, "psql", "--username=" + user, "--dbname=" + database, "--quiet",
                 "--command", sql);
     }
 
@@ -169,43 +178,24 @@ class BackupRestoreTest {
      * megabytes of SQL containing every quoting character there is, and a
      * command line is the wrong place for it.
      */
-    private static String exec(PostgreSQLContainer<?> postgres, String stdin, String... command)
+    /**
+     * Runs a command inside the database container.
+     *
+     * <p>Everything stays inside: the dump is written to a file there and read
+     * back with {@code cat}. Testcontainers' {@code execInContainer} cannot
+     * supply stdin, and the obvious workaround — copy the file out and back —
+     * needs {@code MountableFile}, which pulls in a commons-lang3 newer than the
+     * one Boot 2.7 manages. Keeping the file in the container avoids both, and
+     * is closer to what {@code ops/backup.sh} actually does.
+     */
+    private static String exec(PostgreSQLContainer<?> postgres, String... command)
             throws Exception {
-        if (stdin == null) {
-            Container.ExecResult result = postgres.execInContainer(command);
-            if (result.getExitCode() != 0) {
-                throw new IllegalStateException(
-                        command[0] + " exited " + result.getExitCode() + ": " + result.getStderr());
-            }
-            return result.getStdout();
-        }
-
-        String path = "/tmp/restore-" + System.nanoTime() + ".sql";
-        postgres.copyFileToContainer(
-                org.testcontainers.utility.MountableFile.forHostPath(writeTemp(stdin)), path);
-        String[] piped = new String[command.length + 3];
-        piped[0] = "sh";
-        piped[1] = "-c";
-        StringBuilder line = new StringBuilder();
-        for (String argument : command) {
-            line.append('\'').append(argument.replace("'", "'\\''")).append("' ");
-        }
-        line.append("< ").append(path);
-        piped[2] = line.toString();
-        Container.ExecResult result = postgres.execInContainer(piped[0], piped[1], piped[2]);
+        Container.ExecResult result = postgres.execInContainer(command);
         if (result.getExitCode() != 0) {
             throw new IllegalStateException(
-                    "restore exited " + result.getExitCode() + ": " + result.getStderr());
+                    command[0] + " exited " + result.getExitCode() + ": " + result.getStderr());
         }
         return result.getStdout();
-    }
-
-    private static java.nio.file.Path writeTemp(String content) throws Exception {
-        java.nio.file.Path file = java.nio.file.Files.createTempFile("coreintra-restore", ".sql");
-        java.nio.file.Files.write(file,
-                content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        file.toFile().deleteOnExit();
-        return file;
     }
 
     private static void seedCompany(Connection connection, String marker) throws Exception {

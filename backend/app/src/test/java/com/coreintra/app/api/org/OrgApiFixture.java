@@ -1,5 +1,6 @@
 package com.coreintra.app.api.org;
 
+import com.coreintra.app.support.DatabaseTestSupport;
 import com.coreintra.app.api.security.SessionCookies;
 import com.coreintra.auth.service.SessionService;
 import com.coreintra.core.org.Company;
@@ -76,21 +77,10 @@ public class OrgApiFixture {
     /** Empties the tables these tests touch, children before parents. */
     public void reset() {
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
-        jdbc.execute("delete from consumed_time_step");
-        jdbc.execute("delete from recovery_code");
-        jdbc.execute("delete from totp_credential");
-        jdbc.execute("delete from auth_session");
-        jdbc.execute("delete from api_key");
-        jdbc.execute("delete from auth_attempt");
-        jdbc.execute("delete from permission_grant");
-        jdbc.execute("delete from position_job_function");
-        jdbc.execute("delete from position");
-        jdbc.execute("delete from user_account");
-        jdbc.execute("delete from employee");
-        jdbc.execute("delete from org_unit");
-        jdbc.execute("delete from job_function");
-        jdbc.execute("delete from rank");
-        jdbc.execute("delete from company");
+        // One reset, ordered by the database rather than by hand: every new
+        // table with a foreign key to an account used to break a different
+        // set of these lists, in whichever class happened to run next.
+        DatabaseTestSupport.resetSchema(jdbc);
     }
 
     public String company(String code, String nameKo) {

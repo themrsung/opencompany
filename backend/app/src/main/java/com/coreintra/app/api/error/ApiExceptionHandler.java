@@ -1,5 +1,9 @@
 package com.coreintra.app.api.error;
 
+import com.coreintra.app.api.http.ETags;
+import com.coreintra.app.api.permission.CurrentPrincipal;
+import com.coreintra.auth.service.AuthenticationService;
+import com.coreintra.auth.service.SessionService;
 import com.coreintra.businesstime.BusinessInstantParseException;
 import com.coreintra.compat.Immutables;
 import com.coreintra.core.permission.PermissionDeniedException;
@@ -26,6 +30,80 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  */
 @RestControllerAdvice
 public class ApiExceptionHandler {
+
+    /**
+     * 401, not 403.
+     *
+     * <p>The distinction matters to the client: a 401 means "refresh your access
+     * token and try again", which the browser client does automatically once,
+     * for everybody. Returning 403 here would make an ordinary expired token
+     * look like a permission problem and show the user an alarming message
+     * instead of quietly working.
+     */
+    @ExceptionHandler(CurrentPrincipal.UnauthenticatedException.class)
+    public ResponseEntity<ProblemDetail> onUnauthenticated(CurrentPrincipal.UnauthenticatedException e) {
+        return problem(ProblemDetail.of(HttpStatus.UNAUTHORIZED.value(), "unauthenticated",
+                "Not signed in", e.getMessage()));
+    }
+
+    /**
+     * A failed sign-in, and an invalid session, answer the same way.
+     *
+     * <p>The service already refuses to say which of "no such user", "wrong
+     * code" and "code already used" applied; this must not undo that by mapping
+     * them to different statuses or different codes.
+     */
+    @ExceptionHandler({AuthenticationService.AuthenticationFailedException.class,
+            SessionService.InvalidSessionException.class})
+    public ResponseEntity<ProblemDetail> onAuthenticationFailed(RuntimeException e) {
+        return problem(ProblemDetail.of(HttpStatus.UNAUTHORIZED.value(), "authentication_failed",
+                "Sign-in failed", e.getMessage()));
+    }
+
+    /**
+     * 429 with {@code Retry-After}.
+     *
+     * <p>The header is not decoration: without it a client either hammers the
+     * endpoint or backs off for an arbitrary time, and the progressive lockout
+     * is there to slow an attacker down, not the person who mistyped a code.
+     */
+    @ExceptionHandler(AuthenticationService.ThrottledException.class)
+    public ResponseEntity<ProblemDetail> onThrottled(AuthenticationService.ThrottledException e) {
+        long seconds = Math.max(1, e.retryAfter().getSeconds());
+        Map<String, Object> extensions =
+                Immutables.<String, Object>mapOf("retryAfterSeconds", Long.valueOf(seconds));
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", Long.toString(seconds))
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(new ProblemDetail("about:blank", "Too many attempts",
+                        HttpStatus.TOO_MANY_REQUESTS.value(), e.getMessage(), "rate_limited",
+                        null, extensions));
+    }
+
+    @ExceptionHandler(ETags.PreconditionRequiredException.class)
+    public ResponseEntity<ProblemDetail> onPreconditionRequired(ETags.PreconditionRequiredException e) {
+        return problem(ProblemDetail.of(HttpStatus.PRECONDITION_REQUIRED.value(),
+                "precondition_required", "If-Match required", e.getMessage()));
+    }
+
+    /**
+     * 412, with the current tag attached.
+     *
+     * <p>Handing back the tag the caller needs turns a retry into one round trip
+     * for a client that can re-derive its change, instead of forcing a re-read
+     * it may not be able to do safely.
+     */
+    @ExceptionHandler(ETags.PreconditionFailedException.class)
+    public ResponseEntity<ProblemDetail> onPreconditionFailed(ETags.PreconditionFailedException e) {
+        Map<String, Object> extensions =
+                Immutables.<String, Object>mapOf("currentEtag", e.currentTag());
+        return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED)
+                .eTag(e.currentTag())
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(new ProblemDetail("about:blank", "Changed by someone else",
+                        HttpStatus.PRECONDITION_FAILED.value(), e.getMessage(),
+                        "precondition_failed", null, extensions));
+    }
 
     @ExceptionHandler(PermissionDeniedException.class)
     public ResponseEntity<ProblemDetail> onPermissionDenied(PermissionDeniedException e) {

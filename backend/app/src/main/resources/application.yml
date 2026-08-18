@@ -31,6 +31,21 @@ server:
   error:
     include-message: never     # errors go through the RFC 7807 handler, not Boot's default page
 
+springdoc:
+  api-docs:
+    # OpenAPI 3.1, which springdoc 1.x emits only when asked; the default is
+    # 3.0.1. The brief specifies 3.1 and the generated TypeScript client is
+    # produced from this document, so the version is part of the contract.
+    version: openapi_3_1
+    path: /v3/api-docs
+  swagger-ui:
+    # Off by default. It is a developer convenience, and an on-prem box should
+    # not serve an interactive API console to anyone who finds the port.
+    enabled: ${COREINTRA_SWAGGER_UI_ENABLED:false}
+  # Deterministic ordering, so the committed spec does not churn between runs
+  # and a diff in a pull request means something changed.
+  writer-with-order-by-keys: true
+
 management:
   endpoints:
     web:
@@ -68,7 +83,38 @@ coreintra:
     # When false the module's tables, endpoints, MCP tools and UI are absent.
     enabled: ${COREINTRA_ACCOUNTING_ENABLED:true}
   support:
+    # Refuses issuance for this boot. The permanent kill switch (§8) is a row in
+    # temporary_master_switch, not this: a setting can be edited back, and
+    # "permanently" has to survive someone with a text editor and a deadline.
     temporary-master-disabled: ${COREINTRA_TEMPORARY_MASTER_DISABLED:false}
+  webhooks:
+    dispatcher:
+      # The dispatcher runs inside this process. Passes cannot overlap, so one
+      # slow subscriber delays the queue rather than multiplying threads. Set
+      # false on every box but one if this is ever deployed more than once.
+      enabled: ${COREINTRA_WEBHOOK_DISPATCHER_ENABLED:true}
+      interval-ms: ${COREINTRA_WEBHOOK_DISPATCH_INTERVAL_MS:5000}
+      # Long enough for Flyway and the context to finish on a cold start.
+      initial-delay-ms: ${COREINTRA_WEBHOOK_DISPATCH_INITIAL_DELAY_MS:20000}
+    retry:
+      # Exponential from base to cap, then a bounded number of attempts and we
+      # stop. Eight attempts over roughly an hour: long enough for a restart,
+      # short enough that a dead endpoint stops costing anything. Retrying
+      # forever is not a delivery policy.
+      base-seconds: ${COREINTRA_WEBHOOK_RETRY_BASE_SECONDS:30}
+      cap-seconds: ${COREINTRA_WEBHOOK_RETRY_CAP_SECONDS:1800}
+      max-attempts: ${COREINTRA_WEBHOOK_RETRY_MAX_ATTEMPTS:8}
+    # Both are set deliberately: an endpoint that accepts a connection and then
+    # never answers would otherwise hold the dispatcher until the JVM restarts.
+    connect-timeout-ms: ${COREINTRA_WEBHOOK_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms: ${COREINTRA_WEBHOOK_READ_TIMEOUT_MS:10000}
+    # Written to webhook_delivery.claimed_by, so a log line can be traced to a box.
+    worker-name: ${COREINTRA_WEBHOOK_WORKER_NAME:app}
+  rate-limits:
+    # Counters are in memory; only the policies live in the database. This is
+    # how long a changed policy takes to be noticed, traded against a query on
+    # every request.
+    policy-refresh-seconds: ${COREINTRA_RATE_LIMIT_POLICY_REFRESH_SECONDS:60}
 
 logging:
   level:

@@ -132,6 +132,34 @@ public final class Entry implements Serializable {
         return new Entry(id, bookId, postedAt, description, postings, batchId, EntryStatus.POSTED);
     }
 
+    /**
+     * Rebuilds an entry that is already in the books, with the status and the correction
+     * trail it was stored with.
+     *
+     * <p>The invariant is re-proved on the way in. A row that no longer balances — because a
+     * migration touched it, or someone wrote SQL by hand during a support session — does not
+     * quietly become an {@code Entry}. It throws here, in front of whoever is reading, rather
+     * than surfacing later as a balance sheet that is off by an amount nobody can source.
+     *
+     * <p>Persistence is the only caller. Everything else goes through {@link #post} or
+     * {@link #draft}, which is where the decision whether an entry may exist at all is made.
+     *
+     * @throws UnbalancedEntryException if the stored postings no longer balance
+     */
+    public static Entry rehydrate(String id, String bookId, BusinessInstant postedAt,
+            String description, List<Posting> postings, String batchId,
+            EntryStatus status, List<Revision> revisions) {
+        if (status == null) {
+            throw new IllegalArgumentException("a stored entry needs a status");
+        }
+        Entry entry = post(id, bookId, postedAt, description, postings, batchId);
+        entry.status = status;
+        if (revisions != null) {
+            entry.revisions.addAll(revisions);
+        }
+        return entry;
+    }
+
     /** A draft. Still must balance: a draft that cannot post is not worth keeping. */
     public static Entry draft(String id, String bookId, BusinessInstant postedAt,
             String description, List<Posting> postings) {
@@ -244,6 +272,17 @@ public final class Entry implements Serializable {
         private final String actorAccountId;
         private final BusinessInstant at;
         private final String preStateSnapshot;
+
+        /**
+         * Rebuilds a revision that was already recorded. Persistence is the only caller: a new
+         * correction goes through {@link Entry#recordRevision} or {@link Entry#voidEntry}, which
+         * is where the number and the pre-state come from. Handing those out would let a caller
+         * write a history that never happened.
+         */
+        public static Revision of(int number, String kind, String reason, String actorAccountId,
+                BusinessInstant at, String preStateSnapshot) {
+            return new Revision(number, kind, reason, actorAccountId, at, preStateSnapshot);
+        }
 
         Revision(int number, String kind, String reason, String actorAccountId, BusinessInstant at,
                 String preStateSnapshot) {

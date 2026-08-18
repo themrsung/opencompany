@@ -16,5 +16,13 @@
     <dependency><groupId>com.coreintra</groupId><artifactId>core-domain</artifactId><version>${project.version}</version></dependency>    <dependency><groupId>org.apache.poi</groupId><artifactId>poi-ooxml</artifactId></dependency>
     <dependency><groupId>kr.dogfoot</groupId><artifactId>hwpxlib</artifactId></dependency>
     <dependency><groupId>kr.dogfoot</groupId><artifactId>hwplib</artifactId></dependency>
+    <!-- The rule "no public method here returns a signature's bytes" has to hold for
+         classes nobody has written yet, so it is checked against the compiled package
+         rather than against a list somebody maintains. Version comes from the parent. -->
+    <dependency>
+      <groupId>com.tngtech.archunit</groupId>
+      <artifactId>archunit-junit5</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 </project>

@@ -70,6 +70,10 @@ jobs:
         working-directory: frontend
         run: pnpm exec tsc --noEmit -p tsconfig.json
 
+      - name: Lint
+        working-directory: frontend
+        run: pnpm lint
+
       - working-directory: frontend
         run: pnpm test
 

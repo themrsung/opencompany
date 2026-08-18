@@ -1,5 +1,17 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "noEmit": true, "types": [] },
-  "include": ["src/**/*", "test/**/*"]
+  "compilerOptions": {
+    "noEmit": true,
+    // No ambient types at all. This package is the TypeScript half of the
+    // business-time model and must stay pure — no DOM, no Node, no clock — so
+    // that it behaves identically in a browser, in a test and in a worker.
+    // Emptying `types` is what enforces that: an accidental `Date.now()` via a
+    // Node global will not compile.
+    "types": []
+  },
+  // Source only. The tests legitimately read the shared vector file from disk,
+  // so they need Node types that the source must not have; they are typechecked
+  // by the root project, which has them. Including them here made this build
+  // fail on `node:fs` while proving nothing about the source.
+  "include": ["src/**/*"]
 }

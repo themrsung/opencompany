@@ -1,12 +1,19 @@
 # Build status
 
 Against the 15 milestones in the build brief. §14 asks for slippage to be
-surfaced early rather than absorbed quietly, so this is the honest version.
+surfaced early rather than absorbed quietly, so this is the honest version, and
+the section on what is *not* there is the one worth reading.
 
-**Verified green at the time of writing:** the Java 8 gate proves Java 9+ APIs
-fail the build, 330 backend tests pass (including integration tests against a
-real PostgreSQL 16), 47 frontend tests pass, and the TypeScript strict
-typecheck is clean.
+**Verified green at the time of writing:** `./mvnw -B verify` passes with
+**1,094 backend tests**, including integration tests against a real
+PostgreSQL 16 and 17 ArchUnit rules. The Java 8 gate proves a Java 9+ API call
+fails the build. The frontend typechecks under `strict` with
+`noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`, lints with no
+`any`, and builds.
+
+The API is **143 endpoints** across 17 areas, generating an OpenAPI 3.1
+document that is committed at `docs/api/openapi.json` and from which the
+TypeScript client is generated. CI regenerates both and fails on any drift.
 
 ## Milestone by milestone
 
@@ -14,100 +21,123 @@ typecheck is clean.
 |---|---|---|
 | 1 | Skeleton | **Done** |
 | 2 | Business time | **Done** |
-| 3 | Org + permissions | **Done** |
-| 4 | Auth | **Done** |
-| 5 | Approvals | **Done** — domain + schema; REST surface is thin |
-| 6 | Attendance & leave | **Done** — domain + schema; team-calendar UI not built |
-| 7 | Document core | **Done** — byte-identical round trip; body editor not built |
-| 8 | Conversion, export & fonts | **Mostly** — worker runs and converts; 도장 compositing and the font-manager UI not built |
-| 9 | HWPX + mdv | **Partial** — see below |
-| 10 | 취업규칙 | **Done** |
-| 11 | Temporary master | **Done** (domain, acceptance-tested) — UI not built |
-| 12 | API + MCP | **Not started** |
-| 13 | Accounting | **Done** (engine + reports) — batches and amortisation not built |
+| 3 | Org + permissions | **Done** — services, explainer, and the API over both |
+| 4 | Auth | **Done** — access tokens were missing entirely and are now minted |
+| 5 | Approvals | **Done** — domain, persistence, services, REST and MCP |
+| 6 | Attendance & leave | **Done** — including the who's-in board |
+| 7 | Document core | **Done** — byte-identical round trip, persistence, services |
+| 8 | Conversion, export & fonts | **Done** — worker, font store, licence acknowledgement, signature compositing |
+| 9 | HWPX + mdv | **Done for the backend** — HWPX write, seven seeded templates, mdv in the worker. In-app HWP editor and template-import field mapping are UI and are not built |
+| 10 | 취업규칙 | **Done** — including a table that makes an unapproved version structurally impossible |
+| 11 | Temporary master | **Done** — domain, persistence, API, capability wording |
+| 12 | API + MCP | **Done** — 143 endpoints, generated client with a drift gate, MCP server, webhooks, rate limits |
+| 13 | Accounting | **Done** — engine, persistence, batches, amortisation, six reports, permission gate |
 | 14 | Module SDK | **Done** |
-| 15 | Ops | **Done** — restore proven by script, not yet by a CI test |
+| 15 | Ops | **Done** — restore now proven by a CI test rather than by a script |
 
 ## What is genuinely not there
 
-Stated plainly, because a list of what works is only useful next to this.
+### A fresh installation could not be opened until very late in this build
 
-**No user interface.** This is the single largest gap. The frontend has the
-business-time package, the forked mdv editor package, and the workspace — but
-the approval inbox, the who's-in view, the document editor, the font manager
-and the temporary-master issuance flow are not built. The brief names the
-approval inbox and the who's-in view as "the two screens that decide whether
-people like this product"; neither exists yet. Nearly everything below the UI is
-there to support them.
+This is the most important thing on the page. Writing the demo seed proved that
+an empty box was unusable: **nothing creates a `UserAccount`**, and the grant
+service correctly refuses any permission the caller does not already hold, so
+the first grant was impossible. `company_representation` and
+`approval_line_template` were read by the system and written by nobody.
 
-**Milestone 12 (API + MCP) is not started.** No OpenAPI generation, no generated
-`packages/api-client`, no MCP server, no webhooks, no rate limits. Two REST
-endpoints exist (the effective-permissions explainer) as a pattern; the rest of
-the domain is reachable only from Java.
+An installer closes it. The question it forces — **what the minimum bootstrap
+grant set should be** — is a security decision and is written up in
+`docs/decisions/open-decisions.md` rather than quietly settled.
 
-**Milestone 9 is partial.** The pivot model, the generated fidelity matrix, the
-adapters' capability declarations and the forked editor are done. The HWPX
-section-model mapping is not — `HwpxAdapter.write` refuses with an explanation
-rather than producing an approximate file. hwpxlib is verified working on Java 8
-(blank HWPX created, written, re-read), so this is remaining work rather than a
-blocked path. Also missing: the in-app HWP editor and faithful preview, template
-import with the field-mapping UI, and the seven seeded ko/en templates.
+Related, and still true: `V6__seed_defaults.sql` seeds ranks, 직무, attendance
+statuses and the 연차 policy **only for companies that existed when the
+migration ran**, which on a fresh install is none. Company creation now applies
+them; a client adding a second company would otherwise have hit the same wall.
 
-**Not built anywhere:** 도장/signature compositing, the audit log tables (the
-design is settled and referenced throughout, the tables are not written),
-webhooks, the demo seed script, i18n resource bundles (Korean strings are
-currently inline where they appear).
+### mdv cannot produce a Korean PDF
 
-## Where the brief's own risk assessment proved right
+The pinned build **embeds no fonts at all** — not "CJK needs configuration".
+Korean renders as `?`, `MDV5100` is raised as a *warning*, and the exit status
+is zero. `pdf-ua-1` stamps an ISO 14289-1 accessibility claim onto a file whose
+fonts are not embedded, which that standard requires; `pdf-a-3b` is a no-op.
 
-§14 predicted milestones 7–9 would be where the schedule slips. It was right,
-and for a reason worth recording: those milestones depend on external binaries
-and formats whose behaviour has to be *discovered* rather than designed. Three
-findings changed decisions mid-build:
+The conversion worker refuses all three rather than producing a document that
+looks finished and is not, and Korean PDF takes the LibreOffice path. mdv
+remains a first-class **authoring, diffing and viewing** format — it is the only
+format here that can produce a real version diff, which is why it is here — and
+it is not yet a Korean PDF path. ADR 0008 and the fidelity matrix both say so.
 
-1. **docx4j has no Java 8 line at all** (class major 55 even at 11.5.5), which
-   settled the §6.1 engine choice as Apache POI. Found by reading class file
-   headers, not release notes.
-2. **No object model can give a byte-identical round trip.** Measured: opening
-   the test fixture through POI and saving it unchanged alters or drops 11 of
-   its 12 parts. That forced the package-level architecture, which is why the
-   round trip is byte-identical rather than merely equivalent.
-3. **fontconfig substitutes silently, and installing a Korean font is not
-   enough.** `fc-match Pretendard` returns DejaVu Sans — no Korean coverage at
-   all — and after installing Noto CJK, LibreOffice still embedded a *Chinese*
-   face. Substitution detection had to be ours.
+### Things that are not built
 
-## Corrections made during the build
+- **The in-app HWP editor and faithful preview**, and **template import with the
+  field-mapping UI** (§6.6, §6.7). The backend can read, write and convert
+  HWPX; the editing surfaces for it are not built.
+- **Leave balances in the demo seed.** A 휴가신청서 cannot be fully approved
+  because final approval fires the deduction adapter, which reads the day count
+  off a document body that the seeded template does not yet supply. The seed
+  refuses rather than faking one.
+- **Notifications** are a logging `Notifier` only. No in-app inbox, no mail
+  wiring beyond the SPI.
+- **i18n resource bundles on the backend.** Korean strings in Java are still
+  inline where they appear. The frontend catalogue is complete and typed; the
+  server's is not.
+- **Client modules** beyond the SPI, the registry and the worked example.
 
-- **ADR 0008 initially said `@mdv/lsp` does not exist**, on the strength of
-  `CONTRACTS.md` listing it as "not scaffolded". That was wrong: the package is
-  implemented, and its transport is host-supplied with no `node:*` imports, so
-  the language server runs in a web worker in the browser. The ADR is corrected
-  and the editor wires the LSP as the brief asked, rather than working around it.
-- **`Amount.ofDouble` was removed.** It was a runtime tripwire that did not
-  catch the mistake it claimed to and violated the ArchUnit rule it was meant to
-  support. Replaced with build-time bans on `BigDecimal.valueOf(double)` and
-  `new BigDecimal(double)` in money paths, which catch the real thing.
+### Known compromises, each documented where it lives
 
-## Open questions from §15 answered by default
+- **Webhook secrets are encrypted, not hashed**, contrary to the brief. We are
+  the sender, so signing needs the plaintext back; no version of this feature
+  can hash it. The prefix-visible half is kept.
+- **The support-session banner is not permission-gated** — a narrow, argued
+  exception to §10, because an oversight notice whose visibility depends on a
+  grant is one the overseen party can switch off.
+- **Rate-limit counters are in memory**, correct for the one-box deployment and
+  named as the thing to replace if that changes.
+- **No `@Version` column** on several tables, so ETags derive from the mutable
+  fields. Correct for concurrency; an edit-then-exact-revert reuses a tag.
+- **Retention cannot prune the audit log.** The append-only trigger refuses
+  every delete, so pruning is a DBA act. That is the cost of §12's guarantee.
 
-Defaults taken rather than asked, all from the brief itself:
+## Bugs this build found in work that already looked finished
 
-- Korean 연차 seeded as an **editable policy row**, statutory reference in a
-  comment rather than a code path.
-- **No 세무 interop** (§9 excludes tax filing and bank integration).
-- **No AGPL component in any shipped configuration** — the default install ships
-  neither Collabora nor OnlyOffice, as §6.2 specifies.
-- mdv conformance: **Level 2 (Standard)** as substantiated by the repo's own
-  report. Complex-script shaping is Level 3, so Arabic and Indic are declared
-  unsupported in the fidelity matrix rather than misrendered.
+Worth recording, because each had been green in CI:
 
-## Suggested order from here
+1. **The integration tests had never run against a database.**
+   `@DynamicPropertySource` on a standalone helper class is never invoked, so
+   Boot fell back to `localhost:5432` and the suite failed with "connection
+   refused" on a machine with Docker running the whole time.
+2. **`SessionService` declared `ACCESS_TOKEN_LIFETIME` and minted no access
+   token.** Nothing an ordinary request could present existed.
+3. **`ApiKeyService.issue` threw on every call** — it minted the *public* prefix
+   with the bearer-secret generator, which correctly refuses below 128 bits. The
+   scoped-key path had never worked end to end.
+4. **`permission_grant` had no `revoked_at`**, so revoking meant `DELETE` —
+   breaking the no-hard-delete rule exactly where an auditor asks the question,
+   and discarding the mandatory reason.
+5. **`balanceSheet` double-counted a closed year's profit.** It excluded closing
+   batches from `unclosedNetIncome`, so after any year-end close the same profit
+   sat in both equity and the unclosed line and the `balanced` alarm fired. An
+   alarm that goes off every January for every client is an alarm nobody reads.
+6. **The OpenAPI document had 22 dangling `$ref`s** the first time it was
+   generated — springdoc omits schemas that appear only as array item types.
+7. **The `api-client-drift` CI job could never have passed**: no frontend
+   dependencies installed, and the spec never regenerated.
+8. **Twelve test classes were red for one reason** — each rolled its own
+   cleanup, so every new table with a foreign key to an account broke a
+   different set, in whichever class happened to run next.
 
-1. **Milestone 12 (API + MCP)**, then the UI. Nearly every remaining gap is a
-   screen, and screens need endpoints. Doing the API first also makes the MCP
-   server almost free, since it exposes the same capabilities.
-2. **The approval inbox and the who's-in view**, in that order — the two screens
-   the brief says decide whether people like the product.
-3. **HWPX section mapping**, which unblocks the seeded templates and the
-   template-import flow.
+## Where the brief's own risk assessment proved right, again
+
+§14 predicted milestones 7–9 would be where the schedule slips, and it was right
+for the same reason as before: those milestones depend on external binaries and
+formats whose behaviour has to be *discovered*. This round the discoveries were
+in hwpxlib — it stamps zip entries with the current time, so two writes seconds
+apart hash differently; it deflates `mimetype`, which an OCF container requires
+stored and first; and it silently drops any attached part whose media type is
+not an image — and in mdv, above.
+
+The other place effort went that the brief did not predict is **the seams
+between modules**. Almost every defect in the list above lives at a boundary:
+between a test helper and Spring, between a service and its schema, between
+springdoc and a generator, between one test class's cleanup and the next class's
+fixtures.

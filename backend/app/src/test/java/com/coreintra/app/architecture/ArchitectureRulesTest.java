@@ -107,6 +107,34 @@ class ArchitectureRulesTest {
                             + "never as a double (ADR 0004)");
             parameters.allowEmptyShould(true).check(production);
         }
+
+        @Test
+        @DisplayName("BigDecimal.valueOf(double) is banned in money paths")
+        void noBigDecimalFromDouble() {
+            // The subtle one, and the reason a runtime tripwire on Amount was
+            // not enough: BigDecimal.valueOf(0.1) compiles, looks careful, and
+            // carries the floating-point error straight in. It is the actual
+            // way this mistake gets made.
+            ArchRule rule = noClasses()
+                    .that().resideInAPackage("com.coreintra.accounting..")
+                    .should().callMethod(java.math.BigDecimal.class, "valueOf", double.class)
+                    .because("BigDecimal.valueOf(0.1) produces 0.1000000000000000055511151231257827. "
+                            + "Construct from an exact decimal string instead. See ADR 0004.");
+            rule.allowEmptyShould(true).check(production);
+        }
+
+        @Test
+        @DisplayName("new BigDecimal(double) is banned too")
+        void noBigDecimalDoubleConstructor() {
+            // Worse than valueOf: it keeps every spurious digit rather than
+            // rounding to the shortest representation.
+            ArchRule rule = noClasses()
+                    .that().resideInAPackage("com.coreintra.accounting..")
+                    .should().callConstructor(java.math.BigDecimal.class, double.class)
+                    .because("new BigDecimal(0.1) is exactly 0.1000000000000000055511151231257827. "
+                            + "Construct from a string. See ADR 0004.");
+            rule.allowEmptyShould(true).check(production);
+        }
     }
 
     @Nested

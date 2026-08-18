@@ -91,7 +91,7 @@ public class ApprovalInboxResponse {
         this.listLimit = listLimit;
     }
 
-    static ApprovalInboxResponse from(ApprovalInbox inbox, int listLimit) {
+    public static ApprovalInboxResponse from(ApprovalInbox inbox, int listLimit) {
         return new ApprovalInboxResponse(inbox.accountId(), new Counts(inbox),
                 summaries(inbox.awaitingMe()), summaries(inbox.draftedByMe()),
                 summaries(inbox.copiedToMe()), listLimit);

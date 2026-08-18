@@ -79,6 +79,12 @@ CREATE INDEX employment_rules_effective_idx
 -- Section-level, because §4 asks for a section-level diff against the prior
 -- version. Storing the whole text as one blob would make "제12조 changed, the
 -- rest did not" something a diff library guesses at from prose.
+--
+-- No created_at on this table or on the representative list below, and the
+-- omission is deliberate rather than forgotten: both are components of one
+-- immutable parent row, written in the same transaction and never touched
+-- again, so their creation moment is the parent's and a second copy of it would
+-- be one more thing that can disagree.
 CREATE TABLE employment_rules_section (
     rules_id       VARCHAR(36)  NOT NULL REFERENCES employment_rules (id),
     -- 제N조 as printed, not an integer: 제12조의2 is a real section number.

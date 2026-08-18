@@ -2,6 +2,8 @@ package com.coreintra.app.api.documents;
 
 import com.coreintra.compat.Immutables;
 import com.coreintra.documents.internal.FidelityMatrix;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,13 +23,13 @@ import java.util.List;
 public class FidelityRowView {
 
     /** One feature's fate, in both languages, because Korean is the default locale. */
-    public static class Feature {
+    public static class FeatureView {
         private final String feature;
         private final String support;
         private final String describeKo;
         private final String describeEn;
 
-        Feature(FidelityMatrix.Row row) {
+        FeatureView(FidelityMatrix.Row row) {
             this.feature = row.feature().name();
             this.support = row.support().name();
             this.describeKo = row.describeKo();
@@ -61,8 +63,8 @@ public class FidelityRowView {
     private final boolean supported;
     private final String unsupportedReason;
     private final String note;
-    private final List<Feature> concerns;
-    private final List<Feature> features;
+    private final List<FeatureView> concerns;
+    private final List<FeatureView> features;
 
     private FidelityRowView(FidelityMatrix.Pair pair) {
         this.available = true;
@@ -140,19 +142,21 @@ public class FidelityRowView {
     }
 
     /** Only what degrades, is preserved opaquely, or is dropped. What a dialog shows. */
-    public List<Feature> getConcerns() {
+    @ArraySchema(schema = @Schema(implementation = FeatureView.class))
+    public List<FeatureView> getConcerns() {
         return concerns;
     }
 
     /** Every feature, including the ones that survive. What a matrix page shows. */
-    public List<Feature> getFeatures() {
+    @ArraySchema(schema = @Schema(implementation = FeatureView.class))
+    public List<FeatureView> getFeatures() {
         return features;
     }
 
-    private static List<Feature> wrap(List<FidelityMatrix.Row> rows) {
-        List<Feature> wrapped = new ArrayList<Feature>(rows.size());
+    private static List<FeatureView> wrap(List<FidelityMatrix.Row> rows) {
+        List<FeatureView> wrapped = new ArrayList<FeatureView>(rows.size());
         for (FidelityMatrix.Row row : rows) {
-            wrapped.add(new Feature(row));
+            wrapped.add(new FeatureView(row));
         }
         return Immutables.copyOf(wrapped);
     }

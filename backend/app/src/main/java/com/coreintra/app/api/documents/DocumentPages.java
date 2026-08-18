@@ -55,14 +55,18 @@ public final class DocumentPages {
 
     public static <T, V> CursorPage<V> page(List<T> rows, Keys<T> keys, Function<T, V> view,
             String cursor, Integer limit) {
+        // Decoded before the empty check, deliberately. Answering an empty page
+        // for a corrupt cursor would make a client looping on a broken cursor
+        // look like a client that had reached the end, and the collection being
+        // empty today is not a reason to accept a cursor that can never work.
+        Cursors.Position from = Cursors.decode(cursor);
+        int size = Cursors.pageSize(limit, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+
         if (rows == null || rows.isEmpty()) {
             return CursorPage.empty();
         }
         List<T> sorted = new ArrayList<T>(rows);
         Collections.sort(sorted, order(keys));
-
-        Cursors.Position from = Cursors.decode(cursor);
-        int size = Cursors.pageSize(limit, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
 
         List<V> items = new ArrayList<V>();
         T last = null;

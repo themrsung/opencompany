@@ -2,6 +2,7 @@ package com.coreintra.app.api.attendance;
 
 import com.coreintra.app.api.approval.ApiWire;
 import com.coreintra.app.api.paging.CursorPage;
+import com.coreintra.app.api.paging.Cursors;
 import com.coreintra.app.api.permission.CurrentPrincipal;
 import com.coreintra.attendance.entity.AttendanceRecord;
 import com.coreintra.attendance.service.AttendanceRecordService;
@@ -137,8 +138,7 @@ public class AttendanceRecordController {
             new ApiWire.Keys<AttendanceRecord>() {
                 @Override
                 public String sortKey(AttendanceRecord row) {
-                    return com.coreintra.app.api.paging.Cursors.sortKey(
-                            row.interval().startedAt());
+                    return Cursors.sortKey(row.interval().startedAt());
                 }
 
                 @Override

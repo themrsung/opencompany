@@ -13,6 +13,7 @@ import com.coreintra.documents.entity.DocumentFormat;
 import com.coreintra.documents.entity.DocumentVersionEntity;
 import com.coreintra.documents.schema.DocumentFieldSchema;
 import com.coreintra.documents.service.DocumentService;
+import com.coreintra.documents.service.FieldValueFormatException;
 import com.coreintra.documents.service.TemplateService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -189,9 +190,17 @@ public class DocumentController {
 
         BusinessInstant authoredAt = BusinessInstants.resolve(body.getAuthoredAt());
         String locale = Texts.isBlank(body.getLocale()) ? "ko" : Texts.strip(body.getLocale());
-        DocumentEntity document = documents.createFromTemplate(body.getCompanyId(),
-                body.getTemplateId(), body.getTemplateVersionNo(), locale, body.getTitle(),
-                caller.accountId(), authoredAt, body.getDefaultCurrencyCode());
+        DocumentEntity document;
+        try {
+            document = documents.createFromTemplate(body.getCompanyId(), body.getTemplateId(),
+                    body.getTemplateVersionNo(), locale, body.getTitle(), caller.accountId(),
+                    authoredAt, body.getDefaultCurrencyCode());
+        } catch (FieldValueFormatException unreadable) {
+            return DocumentProblems.fieldFormat(unreadable);
+        } catch (DocumentFieldSchema.SchemaMismatchException mismatch) {
+            return DocumentProblems.unprocessable("schema_mismatch",
+                    "The template's manifest and body disagree", mismatch.getMessage());
+        }
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .eTag(DocumentView.tagOf(document))
@@ -385,9 +394,20 @@ public class DocumentController {
             return DocumentProblems.tooLarge(oversize);
         }
 
-        DocumentVersionEntity version = documents.saveVersion(documentId,
-                Uploads.bytes(file, "document"), documentFormat(format), caller.accountId(),
-                BusinessInstants.resolve(authoredAt), defaultCurrencyCode);
+        DocumentVersionEntity version;
+        try {
+            version = documents.saveVersion(documentId, Uploads.bytes(file, "document"),
+                    documentFormat(format), caller.accountId(),
+                    BusinessInstants.resolve(authoredAt), defaultCurrencyCode);
+        } catch (FieldValueFormatException unreadable) {
+            // Named, and nothing stored: the projection can never disagree with
+            // the document, so a field that cannot be read stops the save.
+            return DocumentProblems.fieldFormat(unreadable);
+        } catch (DocumentFieldSchema.SchemaMismatchException mismatch) {
+            return DocumentProblems.unprocessable("schema_mismatch",
+                    "The document no longer matches its template's field manifest",
+                    mismatch.getMessage());
+        }
 
         // The tag moves with the version: the caller's next write must carry the
         // one this save produced, not the one they arrived with.

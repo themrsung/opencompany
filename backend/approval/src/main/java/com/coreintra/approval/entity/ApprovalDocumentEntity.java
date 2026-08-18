@@ -48,6 +48,18 @@ public class ApprovalDocumentEntity {
     @Column(name = "template_id", length = 36)
     private String templateId;
 
+    /**
+     * The document body this approval is about (V14).
+     *
+     * <p>Null where there is no body yet — a 취업규칙 change proposed before its
+     * text is drafted is a real case. Never a dangling id: the column carries a
+     * foreign key. Until V14 there was no way at all to get from a submitted
+     * approval to what it was about, because {@code approval_snapshot} is keyed
+     * per action and so does not exist until somebody signs.
+     */
+    @Column(name = "document_id", length = 36)
+    private String documentId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "state", nullable = false, length = 24)
     private ApprovalState state = ApprovalState.DRAFTING;
@@ -135,6 +147,15 @@ public class ApprovalDocumentEntity {
 
     public void setTemplateId(String value) {
         this.templateId = value;
+    }
+
+    /** The body this approval is about, or null where it has none. */
+    public String documentId() {
+        return documentId;
+    }
+
+    public void setDocumentId(String value) {
+        this.documentId = value;
     }
 
     public ApprovalState state() {

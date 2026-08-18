@@ -108,16 +108,25 @@ public final class Pages {
         return new CursorPage<V>(items, next);
     }
 
-    /** Left-pads a number so that 9 sorts before 10 as a string. */
+    /**
+     * A number as a sort key that compares the way the number does.
+     *
+     * <p>Biased into positive territory and left-padded, so that lexicographic
+     * order matches numeric order across the whole {@code int} range: 9 sorts
+     * before 10, and -50 sorts before -10. Writing the minus sign out instead
+     * would invert the negatives — '-' sorts below every digit, so "-10" would
+     * come before "-50" and a ladder ordered by negated seniority would come
+     * back upside down. {@link Cursors#sortKey} biases a business-time offset
+     * for the same reason.
+     */
     public static String number(int value) {
-        StringBuilder padded = new StringBuilder();
-        String text = Integer.toString(Math.abs(value));
-        for (int i = text.length(); i < 9; i++) {
+        long biased = (long) value - (long) Integer.MIN_VALUE;
+        String text = Long.toString(biased);
+        StringBuilder padded = new StringBuilder(10);
+        for (int i = text.length(); i < 10; i++) {
             padded.append('0');
         }
-        // '-' sorts below every digit, so negatives land before positives -
-        // the same trick Cursors uses for a pre-shift briefing.
-        return (value < 0 ? "-" : "0") + padded.append(text).toString();
+        return padded.append(text).toString();
     }
 
     private static <T> Comparator<T> order(final Keys<T> keys) {

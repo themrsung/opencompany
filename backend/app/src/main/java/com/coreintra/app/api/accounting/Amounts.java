@@ -3,7 +3,6 @@ package com.coreintra.app.api.accounting;
 import com.coreintra.accounting.domain.Amount;
 import com.coreintra.compat.Texts;
 import java.time.LocalDate;
-import java.util.List;
 
 /**
  * How money crosses this API's wire, in both directions.
@@ -37,18 +36,6 @@ public final class Amounts {
     /** An amount as it goes out: exact, complete, and textual. Null stays null. */
     public static String wire(Amount amount) {
         return amount == null ? null : amount.toExactString();
-    }
-
-    /** Every amount in a list, in order. */
-    public static String[] wire(List<Amount> amounts) {
-        if (amounts == null) {
-            return new String[0];
-        }
-        String[] out = new String[amounts.size()];
-        for (int index = 0; index < amounts.size(); index++) {
-            out[index] = wire(amounts.get(index));
-        }
-        return out;
     }
 
     /**

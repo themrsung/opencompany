@@ -28,15 +28,24 @@ import java.util.List;
 @Schema(name = "ApprovalStep", description = "One step of a resolved 결재선.")
 public class ApprovalStepView {
 
-    /** One snapshotted approver, with the label they held at the time. */
-    @Schema(name = "ApprovalStepApprover")
-    public static class ApproverView {
+    /**
+     * One snapshotted approver, with the label they held at the time.
+     *
+     * <p>Named for the schema it becomes rather than shortened to a Java
+     * convention. springdoc emits a bare {@code $ref} for a type that appears
+     * only as an array item two levels down, and {@code DanglingSchemaCompleter}
+     * fills that gap by simple class name — so renaming the schema away from the
+     * class would leave a reference in the contract with nothing behind it, and
+     * the generated client would type this as {@code unknown}.
+     */
+    public static class ApprovalStepApprover {
         private final String accountId;
         private final String displayName;
         private final String rankLabel;
         private final boolean acted;
 
-        ApproverView(String accountId, String displayName, String rankLabel, boolean acted) {
+        ApprovalStepApprover(String accountId, String displayName, String rankLabel,
+                boolean acted) {
             this.accountId = accountId;
             this.displayName = displayName;
             this.rankLabel = rankLabel;
@@ -74,11 +83,11 @@ public class ApprovalStepView {
     private final int remainingApprovals;
     private final boolean satisfied;
     private final boolean pending;
-    private final List<ApproverView> approvers;
+    private final List<ApprovalStepApprover> approvers;
 
     private ApprovalStepView(String id, int position, String kind, String roleExpression,
             String state, int requiredApprovals, int approvalsGiven, int remainingApprovals,
-            boolean satisfied, boolean pending, List<ApproverView> approvers) {
+            boolean satisfied, boolean pending, List<ApprovalStepApprover> approvers) {
         this.id = id;
         this.position = position;
         this.kind = kind;
@@ -98,9 +107,10 @@ public class ApprovalStepView {
      *        account ids
      */
     static ApprovalStepView from(ApprovalStep step, List<ApprovalStepApproverEntity> snapshot) {
-        List<ApproverView> people = new ArrayList<ApproverView>();
+        List<ApprovalStepApprover> people = new ArrayList<ApprovalStepApprover>();
         for (ApprovalStepApproverEntity approver : snapshot) {
-            people.add(new ApproverView(approver.accountId(), approver.resolvedDisplayName(),
+            people.add(new ApprovalStepApprover(approver.accountId(),
+                    approver.resolvedDisplayName(),
                     approver.resolvedRankLabel(), hasActed(step, approver.accountId())));
         }
         return new ApprovalStepView(step.id(), step.position(), step.kind().name(),
@@ -173,7 +183,7 @@ public class ApprovalStepView {
 
     @Schema(description = "Resolved once at submission and frozen, so a later reorg does "
             + "not change who a document in flight is waiting on.")
-    public List<ApproverView> getApprovers() {
+    public List<ApprovalStepApprover> getApprovers() {
         return approvers;
     }
 }

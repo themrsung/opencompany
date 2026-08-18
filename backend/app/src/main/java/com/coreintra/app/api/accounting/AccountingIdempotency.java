@@ -70,19 +70,62 @@ public class AccountingIdempotency {
     public ResponseEntity<Object> once(PermissionPrincipal caller, String companyId,
             String idempotencyKey, String endpoint, Object request, HttpStatus created,
             Supplier<Object> work) {
+        Outcome outcome = run(caller, companyId, idempotencyKey, endpoint, request,
+                created.value(), work);
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(outcome.status());
+        if (outcome.isReplayed()) {
+            response = response.header("Idempotent-Replay", "true");
+        }
+        return response.body(outcome.body());
+    }
+
+    /**
+     * The same guarantee without an HTTP response around it, for the MCP surface.
+     *
+     * <p>MCP has no headers to carry a key in, so the write tool takes one as an argument and
+     * comes through here. It matters more there, not less: a model retrying a tool call it is not
+     * sure completed is the ordinary case, and posting the entry twice is the ordinary
+     * consequence.
+     */
+    public Outcome run(PermissionPrincipal caller, String companyId, String idempotencyKey,
+            String endpoint, Object request, int createdStatus, Supplier<Object> work) {
         requireUsableKey(idempotencyKey);
         IdempotencyDecision decision = keys.begin(companyId, caller.accountId(), idempotencyKey,
                 endpoint, fingerprint(request));
         if (decision.isReplay()) {
-            return ResponseEntity
-                    .status(decision.status() == null ? created.value()
-                            : decision.status().intValue())
-                    .header("Idempotent-Replay", "true")
-                    .body(reread(decision.body()));
+            return new Outcome(reread(decision.body()),
+                    decision.status() == null ? createdStatus : decision.status().intValue(),
+                    true);
         }
         Object body = work.get();
-        keys.complete(decision.recordId(), created.value(), fingerprint(body));
-        return ResponseEntity.status(created).body(body);
+        keys.complete(decision.recordId(), createdStatus, fingerprint(body));
+        return new Outcome(body, createdStatus, false);
+    }
+
+    /** What happened: the answer, the status it was answered with, and whether it is a replay. */
+    public static final class Outcome {
+        private final Object body;
+        private final int status;
+        private final boolean replayed;
+
+        Outcome(Object body, int status, boolean replayed) {
+            this.body = body;
+            this.status = status;
+            this.replayed = replayed;
+        }
+
+        /** The DTO on a fresh call; the stored JSON tree, verbatim, on a replay. */
+        public Object body() {
+            return body;
+        }
+
+        public int status() {
+            return status;
+        }
+
+        public boolean isReplayed() {
+            return replayed;
+        }
     }
 
     /**

@@ -119,7 +119,7 @@ class OrgApiPagingIntegrationTest {
                 fixture.employee(companyId, "9999", "늦게온사람");
                 inserted = true;
             }
-            cursor = page.path("nextCursor").isNull() ? null : page.path("nextCursor").asText();
+            cursor = nextCursor(page);
         } while (cursor != null && pages < 20);
 
         assertThat(pages)
@@ -148,9 +148,9 @@ class OrgApiPagingIntegrationTest {
 
         JsonNode first = page(null, 4);
         assertThat(first.path("items")).hasSize(4);
-        assertThat(first.path("nextCursor").isNull())
+        assertThat(nextCursor(first))
                 .as("exactly four rows and a limit of four: there is nothing after them")
-                .isTrue();
+                .isNull();
     }
 
     @Test
@@ -178,6 +178,18 @@ class OrgApiPagingIntegrationTest {
                 .as("quietly serving page one for a corrupt cursor makes an infinite loop look "
                         + "like a working client")
                 .isEqualTo(400);
+    }
+
+    /**
+     * The end signal.
+     *
+     * <p>Absent and null mean the same thing: this installation serialises with
+     * non-null inclusion, so a null cursor is an omitted field rather than a
+     * JSON null. A client that only checked for null would loop for ever.
+     */
+    private static String nextCursor(JsonNode page) {
+        JsonNode cursor = page.path("nextCursor");
+        return cursor.isMissingNode() || cursor.isNull() ? null : cursor.asText();
     }
 
     private JsonNode page(String cursor, int limit) throws Exception {

@@ -1,6 +1,8 @@
 package com.coreintra.app.api.documents;
 
 import com.coreintra.compat.Immutables;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -200,6 +202,7 @@ public class ExportView {
     }
 
     /** Named, never silent: what each requested family resolved to (§6.9). */
+    @ArraySchema(schema = @Schema(implementation = FontWarningView.class))
     public List<FontWarningView> getFontWarnings() {
         return fontWarnings;
     }

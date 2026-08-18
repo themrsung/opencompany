@@ -234,7 +234,7 @@ public class ChartOfAccountsController {
         private final String classification;
         private final String category;
 
-        AccountResponse(Account account, ChartOfAccounts snapshot) {
+        public AccountResponse(Account account, ChartOfAccounts snapshot) {
             this.id = account.id();
             this.parentId = account.parentId();
             this.type = account.type().name();

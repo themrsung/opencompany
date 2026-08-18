@@ -101,8 +101,9 @@ class OrgApiSecurityIntegrationTest {
     @Test
     @DisplayName("a signed-in caller without the grant is refused with 403 naming the permission")
     void unauthorisedIs403NamingThePermission() throws Exception {
-        MvcResult result = mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/org/companies")
-                .cookie(fixture.sessionCookie(accountId))).andReturn();
+        MvcResult result = mockMvc.perform(
+                MockMvcRequestBuilders.get("/api/v1/org/companies/" + companyId)
+                        .cookie(fixture.sessionCookie(accountId))).andReturn();
 
         assertThat(result.getResponse().getStatus()).isEqualTo(403);
 
@@ -111,6 +112,25 @@ class OrgApiSecurityIntegrationTest {
         assertThat(problem.path("extensions").path("requiredPermission").asText())
                 .as("naming the key is what turns a support ticket into a grant")
                 .isEqualTo("company.settings:read");
+    }
+
+    @Test
+    @DisplayName("a collection the caller may not read is empty, not forbidden")
+    void unauthorisedCollectionIsEmpty() throws Exception {
+        MvcResult result = mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/org/companies")
+                .cookie(fixture.sessionCookie(accountId))).andReturn();
+
+        // Deliberate, and different from asking for one row by id. A list is
+        // filtered row by row by the evaluator, so "nothing you may see" is an
+        // answer rather than a refusal; 403 here would tell every user without
+        // company.settings:read that companies exist and that they are being
+        // kept from them, on a screen they are not asking a question on.
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        assertThat(body(result).path("items")).isEmpty();
+        // Absent rather than literally null: the installation serialises with
+        // non-null inclusion, so "no next page" is a missing field. Clients must
+        // treat absent and null identically, and this asserts that they may.
+        assertThat(body(result).path("nextCursor").isMissingNode()).isTrue();
     }
 
     @Test

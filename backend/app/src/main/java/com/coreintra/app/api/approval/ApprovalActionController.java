@@ -5,6 +5,7 @@ import com.coreintra.approval.service.ApprovalActionService;
 import com.coreintra.approval.service.ApprovalDocumentService;
 import com.coreintra.approval.service.ApprovalDocumentView;
 import com.coreintra.businesstime.BusinessInstant;
+import com.coreintra.compat.Texts;
 import com.coreintra.core.permission.PermissionPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -222,12 +223,15 @@ public class ApprovalActionController {
      */
     private WriteOnce.Reservation guard(PermissionPrincipal caller, String documentId,
             String idempotencyKey, String action, Object body) {
-        if (idempotencyKey == null || idempotencyKey.trim().isEmpty()) {
-            return writeOnce.optional(caller, null, null, action, body);
+        String endpoint = "POST /api/v1/approvals/{documentId}/" + action;
+        if (Texts.isBlank(idempotencyKey)) {
+            // No key, no reservation — and, deliberately, no read either. Not
+            // charging every 승인 an extra query is the whole reason the key is
+            // optional here.
+            return writeOnce.optional(caller, null, null, endpoint, body);
         }
         String companyId = documents.read(caller, documentId).document().companyId();
-        return writeOnce.optional(caller, companyId, idempotencyKey,
-                "POST /api/v1/approvals/{documentId}/" + action, body);
+        return writeOnce.optional(caller, companyId, idempotencyKey, endpoint, body);
     }
 
     private static BusinessInstant actedAt(ActionRequest body) {

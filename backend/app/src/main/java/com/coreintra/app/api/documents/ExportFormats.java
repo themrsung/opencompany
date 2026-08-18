@@ -19,13 +19,13 @@ import java.util.Locale;
  * list will be wrong the day a format is added. Every export response therefore
  * carries the labelling with it rather than expecting the client to remember.
  */
-final class ExportFormats {
+public final class ExportFormats {
 
     private ExportFormats() {
     }
 
     /** @throws IllegalArgumentException naming every target, rather than "no enum constant" */
-    static RenderFormat renderFormat(String requested) {
+    public static RenderFormat renderFormat(String requested) {
         if (!Texts.isBlank(requested)) {
             String wanted = Texts.strip(requested).toUpperCase(Locale.ROOT);
             for (RenderFormat candidate : RenderFormat.values()) {
@@ -45,7 +45,7 @@ final class ExportFormats {
                 "\"" + requested + "\" is not an export target. Available: " + targets + ".");
     }
 
-    static String mediaTypeOf(RenderFormat format) {
+    public static String mediaTypeOf(RenderFormat format) {
         if (format == RenderFormat.PDF) {
             return "application/pdf";
         }
@@ -67,7 +67,7 @@ final class ExportFormats {
         return "text/vnd.mdv";
     }
 
-    static String mediaTypeOf(DocumentFormat format) {
+    public static String mediaTypeOf(DocumentFormat format) {
         if (format == DocumentFormat.DOCX) {
             return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
         }
@@ -87,12 +87,12 @@ final class ExportFormats {
      * it round LibreOffice anyway would burn a worker slot and — worse — return
      * bytes that differ from what was approved.
      */
-    static boolean isNativeDownload(DocumentFormat stored, RenderFormat target) {
+    public static boolean isNativeDownload(DocumentFormat stored, RenderFormat target) {
         return stored.name().equals(target.name());
     }
 
     /** The pivot format id the fidelity matrix knows this target by, or null. */
-    static String pivotFormatId(RenderFormat target) {
+    public static String pivotFormatId(RenderFormat target) {
         if (target == RenderFormat.DOCX || target == RenderFormat.HWPX
                 || target == RenderFormat.HWP || target == RenderFormat.MDV) {
             return target.name().toLowerCase(Locale.ROOT);
@@ -103,16 +103,16 @@ final class ExportFormats {
         return null;
     }
 
-    static String pivotFormatId(DocumentFormat stored) {
+    public static String pivotFormatId(DocumentFormat stored) {
         return stored.name().toLowerCase(Locale.ROOT);
     }
 
     /** §6.4: DOC is legacy and lossy, and the UI has to be able to say so. */
-    static boolean isLegacy(RenderFormat target) {
+    public static boolean isLegacy(RenderFormat target) {
         return target == RenderFormat.DOC;
     }
 
-    static String legacyNoteEn(RenderFormat target) {
+    public static String legacyNoteEn(RenderFormat target) {
         if (!isLegacy(target)) {
             return null;
         }
@@ -120,7 +120,7 @@ final class ExportFormats {
                 + "controls, and may reflow. Send .docx unless the recipient cannot open it.";
     }
 
-    static String legacyNoteKo(RenderFormat target) {
+    public static String legacyNoteKo(RenderFormat target) {
         if (!isLegacy(target)) {
             return null;
         }
@@ -136,7 +136,7 @@ final class ExportFormats {
      * everything that does. Sending only the first turns 지출결의서.pdf into
      * ____.pdf; sending only the second loses the download on older clients.
      */
-    static String attachment(String title, String formatName) {
+    public static String attachment(String title, String formatName) {
         String extension = formatName.toLowerCase(Locale.ROOT);
         String base = Texts.isBlank(title) ? "document" : Texts.strip(title);
         String filename = base + "." + extension;

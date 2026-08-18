@@ -21,9 +21,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -231,7 +228,7 @@ public class DocumentExportController {
         // 1. Nothing to convert: the stored bytes already are the export.
         if (ExportFormats.isNativeDownload(version.format(), target)) {
             return ResponseEntity.ok((Object) view
-                    .ready("immediate", nativeContentUrl(documentId, versionNo))
+                    .ready("immediate", ExportRequests.nativeContentUrl(documentId, versionNo))
                     .build());
         }
 
@@ -246,7 +243,7 @@ public class DocumentExportController {
         // 3. A worker has to make it.
         ConversionJobEntity job = jobs.enqueue(document.companyId(), documentId, versionNo,
                 version.blobSha256(), version.format(), target,
-                requestFingerprint(document, version, target, body.getLocale()),
+                ExportRequests.fingerprint(document, version, target, body.getLocale()),
                 caller.accountId());
 
         job = waitBriefly(job, version, body.getWaitMillis());
@@ -262,7 +259,7 @@ public class DocumentExportController {
             return abandoned(job);
         }
         return ResponseEntity.status(HttpStatus.ACCEPTED).body((Object) view
-                .queued(job.id(), job.state().name(), pollUrl(documentId, job.id()))
+                .queued(job.id(), job.state().name(), ExportRequests.pollUrl(documentId, job.id()))
                 .job(job.id(), job.state().name(), job.attemptCount(), job.maxAttempts(),
                         job.errorCode(), job.errorDetail())
                 .build());
@@ -313,15 +310,24 @@ public class DocumentExportController {
                     job.versionNo().intValue(), job.targetFormat(), archived, "asynchronous")
                     .build());
         }
-        if (job.state() == ConversionJobEntity.State.ABANDONED
-                || job.state() == ConversionJobEntity.State.SUCCEEDED) {
-            // SUCCEEDED with no archived render is not success. The job claims a
-            // render that cannot be found, which is a worker bug, and serving a
-            // cheerful "ready" with no bytes is how a truncated download happens.
+        if (job.state() == ConversionJobEntity.State.ABANDONED) {
             return abandoned(job);
         }
+        if (job.state() == ConversionJobEntity.State.SUCCEEDED) {
+            // Success with no archived render is not success. The job names a
+            // render that cannot be found, which is a worker bug, and answering
+            // a cheerful "ready" with no bytes behind it is how a truncated
+            // download reaches a person.
+            return DocumentProblems.conflict("render_missing",
+                    "The conversion reported success but produced no render",
+                    "Job " + job.id() + " says it finished and names render " + job.renderId()
+                            + ", but no archived render for " + job.targetFormat()
+                            + " exists on this version. Nothing is served rather than something "
+                            + "incomplete. This is a fault in the conversion worker and an "
+                            + "operator has to look at it.");
+        }
         return ResponseEntity.status(HttpStatus.ACCEPTED).body((Object) view
-                .queued(job.id(), job.state().name(), pollUrl(documentId, job.id()))
+                .queued(job.id(), job.state().name(), ExportRequests.pollUrl(documentId, job.id()))
                 .build());
     }
 
@@ -395,7 +401,7 @@ public class DocumentExportController {
             int versionNo, RenderFormat target, List<DocumentRenderEntity> archived, String mode) {
 
         DocumentRenderEntity authoritative = archived.get(0);
-        view.ready(mode, exportContentUrl(document.id(), versionNo, target))
+        view.ready(mode, ExportRequests.exportContentUrl(document.id(), versionNo, target))
                 .render(authoritative.id(), String.valueOf(authoritative.renderedAt()),
                         authoritative.rendererVersion(), authoritative.outputSha256())
                 .recordedSubstitutions(
@@ -520,53 +526,4 @@ public class DocumentExportController {
         return current.intValue();
     }
 
-    private static String nativeContentUrl(String documentId, int versionNo) {
-        return "/api/v1/documents/" + documentId + "/versions/" + versionNo + "/content";
-    }
-
-    private static String exportContentUrl(String documentId, int versionNo, RenderFormat target) {
-        return "/api/v1/documents/" + documentId + "/versions/" + versionNo
-                + "/export/content?format=" + target.name();
-    }
-
-    private static String pollUrl(String documentId, String jobId) {
-        return "/api/v1/documents/" + documentId + "/export/jobs/" + jobId;
-    }
-
-    /**
-     * The identity of the <em>request</em>, which is what the queue deduplicates on.
-     *
-     * <p>Deliberately not {@code RenderFingerprint}: that one includes the
-     * renderer version and the resolved font set, which only the worker knows,
-     * and it identifies the <em>output</em>. Two users pressing Export on the
-     * same version, format and locale are asking for the same thing and must join
-     * one job, and that is decidable here. The render the worker archives carries
-     * its own fingerprint, and the two are not expected to match.
-     */
-    private static String requestFingerprint(DocumentEntity document,
-            DocumentVersionEntity version, RenderFormat target, String locale) {
-        String material = "request/v1\nsource=" + version.blobSha256()
-                + "\ntemplate=" + document.templateId() + "@" + document.templateVersionNo()
-                + "\nlocale=" + (Texts.isBlank(locale) ? "ko" : Texts.strip(locale))
-                + "\ntarget=" + target.name();
-        return sha256Hex(material);
-    }
-
-    private static String sha256Hex(String material) {
-        try {
-            byte[] hash = MessageDigest.getInstance("SHA-256")
-                    .digest(material.getBytes(StandardCharsets.UTF_8));
-            StringBuilder hex = new StringBuilder(hash.length * 2);
-            for (int i = 0; i < hash.length; i++) {
-                int value = hash[i] & 0xff;
-                if (value < 0x10) {
-                    hex.append('0');
-                }
-                hex.append(Integer.toHexString(value));
-            }
-            return hex.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is mandatory in every JRE this runs on", e);
-        }
-    }
 }

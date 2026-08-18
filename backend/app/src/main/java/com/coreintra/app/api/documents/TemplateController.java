@@ -15,6 +15,7 @@ import com.coreintra.documents.schema.DocumentFieldSchema;
 import com.coreintra.documents.schema.FieldDefinition;
 import com.coreintra.documents.schema.FieldType;
 import com.coreintra.documents.service.BlobService;
+import com.coreintra.documents.service.FieldValueFormatException;
 import com.coreintra.documents.service.TemplateBody;
 import com.coreintra.documents.service.TemplateService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -381,6 +382,8 @@ public class TemplateController {
                     .body((Object) new TemplateView.Version(version));
         } catch (DocumentFieldSchema.SchemaMismatchException mismatch) {
             return mismatchProblem(mismatch);
+        } catch (FieldValueFormatException unreadable) {
+            return DocumentProblems.fieldFormat(unreadable);
         } catch (OoxmlException unreadable) {
             // The bytes are not the format they were announced as. That is the
             // uploader's mistake and it has an actionable message already.

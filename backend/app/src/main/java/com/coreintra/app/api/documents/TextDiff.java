@@ -37,49 +37,15 @@ final class TextDiff {
     private TextDiff() {
     }
 
-    /** One line of the comparison. */
-    static final class Line {
-        private final String op;
-        private final String text;
-        private final Integer beforeLine;
-        private final Integer afterLine;
-
-        Line(String op, String text, Integer beforeLine, Integer afterLine) {
-            this.op = op;
-            this.text = text;
-            this.beforeLine = beforeLine;
-            this.afterLine = afterLine;
-        }
-
-        /** {@code context}, {@code added} or {@code removed}. */
-        public String getOp() {
-            return op;
-        }
-
-        public String getText() {
-            return text;
-        }
-
-        /** 1-based line number in the earlier version, or null for an added line. */
-        public Integer getBeforeLine() {
-            return beforeLine;
-        }
-
-        /** 1-based line number in the later version, or null for a removed line. */
-        public Integer getAfterLine() {
-            return afterLine;
-        }
-    }
-
     /** The comparison, and whether it is complete. */
     static final class Result {
-        private final List<Line> lines;
+        private final List<DiffLineView> lines;
         private final int added;
         private final int removed;
         private final boolean summarised;
         private final boolean truncated;
 
-        Result(List<Line> lines, int added, int removed, boolean summarised, boolean truncated) {
+        Result(List<DiffLineView> lines, int added, int removed, boolean summarised, boolean truncated) {
             this.lines = Immutables.copyOf(lines);
             this.added = added;
             this.removed = removed;
@@ -87,7 +53,7 @@ final class TextDiff {
             this.truncated = truncated;
         }
 
-        List<Line> lines() {
+        List<DiffLineView> lines() {
             return lines;
         }
 
@@ -141,14 +107,14 @@ final class TextDiff {
         List<String> rightMiddle = after.subList(prefix, after.size() - suffix);
 
         if ((long) leftMiddle.size() * (long) rightMiddle.size() > MAX_CELLS) {
-            return new Result(Immutables.<Line>listOf(), rightMiddle.size(), leftMiddle.size(),
+            return new Result(Immutables.<DiffLineView>listOf(), rightMiddle.size(), leftMiddle.size(),
                     true, false);
         }
 
-        List<Line> middle = walk(leftMiddle, rightMiddle, prefix);
+        List<DiffLineView> middle = walk(leftMiddle, rightMiddle, prefix);
         int added = 0;
         int removed = 0;
-        for (Line line : middle) {
+        for (DiffLineView line : middle) {
             if ("added".equals(line.getOp())) {
                 added++;
             } else if ("removed".equals(line.getOp())) {
@@ -167,7 +133,7 @@ final class TextDiff {
      * trimmed first, and they are the bulk of any real revision — so a one-line
      * edit to a long document costs almost nothing.
      */
-    private static List<Line> walk(List<String> left, List<String> right, int offset) {
+    private static List<DiffLineView> walk(List<String> left, List<String> right, int offset) {
         int rows = left.size();
         int columns = right.size();
         int[][] lengths = new int[rows + 1][columns + 1];
@@ -179,29 +145,29 @@ final class TextDiff {
             }
         }
 
-        List<Line> out = new ArrayList<Line>();
+        List<DiffLineView> out = new ArrayList<DiffLineView>();
         int i = 0;
         int j = 0;
         while (i < rows && j < columns) {
             if (left.get(i).equals(right.get(j))) {
-                out.add(new Line("context", left.get(i), Integer.valueOf(offset + i + 1),
+                out.add(new DiffLineView("context", left.get(i), Integer.valueOf(offset + i + 1),
                         Integer.valueOf(offset + j + 1)));
                 i++;
                 j++;
             } else if (lengths[i + 1][j] >= lengths[i][j + 1]) {
-                out.add(new Line("removed", left.get(i), Integer.valueOf(offset + i + 1), null));
+                out.add(new DiffLineView("removed", left.get(i), Integer.valueOf(offset + i + 1), null));
                 i++;
             } else {
-                out.add(new Line("added", right.get(j), null, Integer.valueOf(offset + j + 1)));
+                out.add(new DiffLineView("added", right.get(j), null, Integer.valueOf(offset + j + 1)));
                 j++;
             }
         }
         while (i < rows) {
-            out.add(new Line("removed", left.get(i), Integer.valueOf(offset + i + 1), null));
+            out.add(new DiffLineView("removed", left.get(i), Integer.valueOf(offset + i + 1), null));
             i++;
         }
         while (j < columns) {
-            out.add(new Line("added", right.get(j), null, Integer.valueOf(offset + j + 1)));
+            out.add(new DiffLineView("added", right.get(j), null, Integer.valueOf(offset + j + 1)));
             j++;
         }
         return Collections.unmodifiableList(out);

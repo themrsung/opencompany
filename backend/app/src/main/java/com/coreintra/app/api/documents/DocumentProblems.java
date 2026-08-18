@@ -74,6 +74,24 @@ public final class DocumentProblems {
                         HttpStatus.UNPROCESSABLE_ENTITY.value(), detail, code, violations, null));
     }
 
+    /**
+     * 422 for a value the declared field type cannot read.
+     *
+     * <p>Named the same way a schema mismatch is: the field tag travels as the
+     * violation's field, because "invalid number" on a document with forty
+     * fields is a message nobody can act on. The offending text comes back too —
+     * it is the user's own input and seeing it is usually the whole diagnosis.
+     */
+    public static ResponseEntity<Object> fieldFormat(
+            com.coreintra.documents.service.FieldValueFormatException failure) {
+        java.util.List<ProblemDetail.Violation> violations =
+                new java.util.ArrayList<ProblemDetail.Violation>();
+        violations.add(new ProblemDetail.Violation(failure.fieldTag(), "value_not_readable",
+                failure.getMessage()));
+        return fieldViolations("field_value_unreadable",
+                "A field holds something its type cannot read", failure.getMessage(), violations);
+    }
+
     private static ResponseEntity<Object> problem(HttpStatus status, String code, String title,
             String detail) {
         return ResponseEntity.status(status)

@@ -359,7 +359,10 @@ public class TemporaryMasterController {
                 .engineerName(body.getEngineerName())
                 .reason(body.getReason())
                 .ticketReference(body.getTicketReference())
-                .typedCompanyName(body.getTypedCompanyName())
+                // Trimmed on the way through. The service checks this again and
+                // does not trim, and it is right not to; but a trailing space
+                // from a paste is not a failed confirmation, it is a space.
+                .typedCompanyName(body.getTypedCompanyName().trim())
                 .issuedAt(now)
                 .issuedOn(BusinessInstant.of(today, secondsIntoDay(now)))
                 .timeToLive(body.getHours() == null

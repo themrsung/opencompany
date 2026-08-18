@@ -52,6 +52,7 @@ import com.coreintra.core.permission.PermissionGrantRow;
 import com.coreintra.core.permission.PermissionKey;
 import com.coreintra.core.permission.PermissionPrincipal;
 import com.coreintra.core.permission.PermissionScope;
+import com.coreintra.documents.internal.BinaryStore;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -63,6 +64,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -90,6 +92,21 @@ class ApprovalFlowIntegrationTest {
     static void requireDatabase() {
         DatabaseTestSupport.requireDatabase();
     }
+
+    /**
+     * Scaffolding, and meant to be deleted.
+     *
+     * <p>{@code SeededTemplateInstaller} in the documents module constructor-
+     * injects a {@link BinaryStore}, and nothing in the installation provides
+     * one yet, so the application context does not start at all — this test and
+     * every other {@code @SpringBootTest} in the module fail identically before
+     * reaching a single assertion. Approvals do not touch it: no path exercised
+     * below calls the installer, so a stub that refuses is honest rather than
+     * convenient. Remove this the moment the documents module wires the real
+     * blob-backed store.
+     */
+    @MockBean
+    private BinaryStore binaryStoreNotYetWiredByTheDocumentsModule;
 
     private static final LocalDate TODAY = LocalDate.of(2026, 8, 18);
     /** 09:00 on the business day. Ordinary office hours, ordinary offset. */

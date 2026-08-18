@@ -150,6 +150,18 @@ class AccountApiIntegrationTest {
         }
     }
 
+    /**
+     * Currently red, and not because of this controller.
+     *
+     * <p>{@code ApiKeyService.issue} mints the key's <em>public</em> prefix with
+     * {@code SecretHasher.randomToken(6)}, and that method refuses anything
+     * under 128 bits — so every issue call throws
+     * {@code IllegalArgumentException} and arrives here as a 400. Nothing had
+     * exercised the path before, so the feature has never worked end to end.
+     * The fix belongs in the auth module (give the prefix its own generator, or
+     * raise {@code PREFIX_BYTES} to 16); these tests are left stating what the
+     * endpoint must do rather than lowered to match what it currently does.
+     */
     @Nested
     @DisplayName("API keys")
     class ApiKeys {
@@ -159,7 +171,12 @@ class AccountApiIntegrationTest {
         void plaintextIsReturnedOnce() throws Exception {
             MvcResult issued = post("/api/v1/account/api-keys",
                     "{\"name\":\"보고서 봇\",\"scopes\":[\"mcp:read\"]}");
-            assertThat(issued.getResponse().getStatus()).isEqualTo(200);
+            assertThat(issued.getResponse().getStatus())
+                    .as("a 400 here is the auth-module bug described on this class, not a "
+                            + "problem with the endpoint: ApiKeyService.issue asks "
+                            + "SecretHasher.randomToken for a 6-byte public prefix and that "
+                            + "method enforces a 128-bit floor meant for secrets")
+                    .isEqualTo(200);
 
             JsonNode key = body(issued);
             String plaintext = key.path("plaintext").asText();

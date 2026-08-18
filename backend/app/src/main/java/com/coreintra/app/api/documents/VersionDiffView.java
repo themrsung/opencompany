@@ -1,6 +1,8 @@
 package com.coreintra.app.api.documents;
 
 import com.coreintra.compat.Immutables;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -64,7 +66,7 @@ public class VersionDiffView {
         private final boolean truncated;
         private final int addedLines;
         private final int removedLines;
-        private final List<TextDiff.Line> lines;
+        private final List<DiffLineView> lines;
 
         Body(boolean available, String reason, TextDiff.Result result) {
             this.available = available;
@@ -74,7 +76,7 @@ public class VersionDiffView {
             this.addedLines = result == null ? 0 : result.added();
             this.removedLines = result == null ? 0 : result.removed();
             this.lines = result == null
-                    ? Immutables.<TextDiff.Line>listOf()
+                    ? Immutables.<DiffLineView>listOf()
                     : Immutables.copyOf(result.lines());
         }
 
@@ -105,7 +107,8 @@ public class VersionDiffView {
             return removedLines;
         }
 
-        public List<TextDiff.Line> getLines() {
+        @ArraySchema(schema = @Schema(implementation = DiffLineView.class))
+        public List<DiffLineView> getLines() {
             return lines;
         }
     }
@@ -175,6 +178,7 @@ public class VersionDiffView {
     }
 
     /** Only the fields that differ. An unchanged field is absent, not listed as equal. */
+    @ArraySchema(schema = @Schema(implementation = FieldChange.class))
     public List<FieldChange> getFields() {
         return fields;
     }

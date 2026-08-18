@@ -36,6 +36,7 @@
     <module>documents</module>
     <module>accounting</module>
     <module>module-api</module>
+    <module>platform-runtime</module>
     <module>app</module>
   </modules>
 

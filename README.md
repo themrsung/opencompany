@@ -84,6 +84,12 @@ it cannot quietly stop being true.
 | `docs/adr/` | Why things are the way they are |
 | `examples/` | A working client module |
 
+## Status
+
+This is an in-progress build. [STATUS.md](STATUS.md) has the honest
+milestone-by-milestone position, including what is deliberately not there yet —
+most notably the user interface and the REST/MCP API surface.
+
 ## Development
 
 ```bash

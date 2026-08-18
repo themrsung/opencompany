@@ -99,16 +99,51 @@ jobs:
     # API types are generated from the backend's OpenAPI spec. Drift between the
     # spec and the committed client fails the build rather than being noticed
     # later by a broken screen.
+    #
+    # Both halves are regenerated here, not just the client: OpenApiSpecTest
+    # rewrites docs/api/openapi.json from the booted application, so a backend
+    # change that alters the wire shape shows up as a diff in the spec even if
+    # nobody touched the frontend.
     runs-on: ubuntu-latest
     needs: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: coreintra_spec
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: "21", cache: maven }
       - uses: pnpm/action-setup@v4
         with: { version: 10 }
       - uses: actions/setup-node@v4
-        with: { node-version: "22" }
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      # The generator lives in the api-client package, so its dependencies have
+      # to be on disk before the drift script can run.
+      - working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Regenerate the OpenAPI document from the running application
+        working-directory: backend
+        run: ./mvnw -B -q -pl app -am test -Dtest=OpenApiSpecTest -DfailIfNoSpecifiedTests=false
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/coreintra_spec
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: postgres
+
       - name: Regenerate the API client and fail on any diff
         run: ./ops/check-api-client-drift.sh
 

@@ -25,7 +25,8 @@
     "paths": {
       "@coreintra/business-time": ["./packages/business-time/src/index.ts"],
       "@coreintra/api-client": ["./packages/api-client/src/index.ts"],
-      "@coreintra/ui": ["./packages/ui/src/index.ts"]
+      "@coreintra/ui": ["./packages/ui/src/index.ts"],
+      "@coreintra/mdv-editor": ["./packages/mdv-editor/src/index.ts"]
     }
   }
 }

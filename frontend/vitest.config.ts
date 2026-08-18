@@ -9,6 +9,7 @@ export default defineConfig({
       '@coreintra/business-time': resolve(root, 'packages/business-time/src/index.ts'),
       '@coreintra/api-client': resolve(root, 'packages/api-client/src/index.ts'),
       '@coreintra/ui': resolve(root, 'packages/ui/src/index.ts'),
+      '@coreintra/mdv-editor': resolve(root, 'packages/mdv-editor/src/index.ts'),
     },
   },
   test: {

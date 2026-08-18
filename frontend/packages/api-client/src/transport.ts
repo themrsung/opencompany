@@ -107,6 +107,9 @@ export class ApiClient {
   async *paginate<T>(path: string, options: RequestOptions = {}): AsyncGenerator<T, void, undefined> {
     let cursor: string | null = null;
     do {
+      // Sequential by definition: page N+1's cursor comes out of page N. There
+      // is nothing here to parallelise.
+      // oxlint-disable-next-line no-await-in-loop
       const page: CursorPage<T> = await this.get<CursorPage<T>>(path, {
         ...options,
         query: { ...options.query, ...(cursor === null ? {} : { cursor }) },
@@ -155,7 +158,12 @@ export class ApiClient {
     } catch (cause) {
       // A network failure is not an HTTP status, and turning it into a fake
       // response would let it be handled as though the server had answered.
-      throw new ApiError(0, null, 'Could not reach the server', null);
+      // The underlying error is kept as the cause: on a self-hosted box the
+      // difference between DNS, TLS and a refused connection is the whole
+      // support ticket.
+      const failure = new ApiError(0, null, 'Could not reach the server', null);
+      failure.cause = cause;
+      throw failure;
     }
   }
 

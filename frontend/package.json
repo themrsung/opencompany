@@ -11,7 +11,7 @@
     "build": "pnpm -r build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint .",
+    "lint": "oxlint",
     "dev": "pnpm --filter @coreintra/web dev"
   },
   "devDependencies": {
@@ -21,6 +21,7 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "jsdom": "30.0.1",
+    "oxlint": "1.78.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "typescript": "7.0.2",

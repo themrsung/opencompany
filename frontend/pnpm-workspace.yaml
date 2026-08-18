@@ -6,3 +6,4 @@ packages:
 # platform binary, which vitest and vite both invoke directly.
 allowBuilds:
   esbuild: true
+

@@ -11,7 +11,27 @@
  * templates, so what someone approves on screen matches what prints.
  */
 
-@import 'pretendard/dist/web/static/pretendard.css';
+/*
+ * The dynamic-subset build, not the single-file one. It splits each weight by
+ * unicode-range, so a Korean screen fetches a few tens of kilobytes instead of
+ * a one-megabyte face, and a document that happens to contain Japanese or
+ * Cyrillic pulls those ranges only when it needs them. The full set costs about
+ * 12 MB on disk, which on a box provisioned for 300 users is not a cost at all.
+ *
+ * The trade it does make is a large stylesheet — 828 @font-face rules, roughly
+ * 145 kB gzipped — because every range is declared up front. That would be the
+ * wrong call on the public internet. Here the browser is on the same LAN as the
+ * box and caches it once, and what it buys is complete coverage: a 사원 whose
+ * name uses a syllable outside the common 2,350 still renders, where the
+ * smaller `pretendard-subset` build would show a missing-glyph box. §13 makes a
+ * missing glyph a test failure, so coverage wins.
+ *
+ * Static instances rather than the variable build, matching what the conversion
+ * worker embeds (see ops/fonts/bundled/README.md): what someone approves on
+ * screen has to match what prints, and variable-font subsetting through
+ * fontkit is the fussier path.
+ */
+@import 'pretendard/dist/web/static/pretendard-dynamic-subset.css';
 
 :root {
   --ci-font-sans:

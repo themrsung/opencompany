@@ -1,0 +1,131 @@
+@import 'tailwindcss';
+@import '@coreintra/ui/tokens.css';
+@import '@coreintra/ui/components.css';
+
+/*
+ * Tailwind's theme is bound to the same custom properties the primitives use,
+ * so a utility and a component class can never disagree about what "accent"
+ * means. There is one palette, and it lives in tokens.css.
+ */
+@theme inline {
+  --font-sans: var(--ci-font-sans);
+  --font-mono: var(--ci-font-mono);
+  --color-bg: var(--ci-bg);
+  --color-bg-subtle: var(--ci-bg-subtle);
+  --color-bg-sunken: var(--ci-bg-sunken);
+  --color-border: var(--ci-border);
+  --color-fg: var(--ci-fg);
+  --color-fg-muted: var(--ci-fg-muted);
+  --color-accent: var(--ci-accent);
+  --color-support: var(--ci-support);
+  --color-danger: var(--ci-danger);
+}
+
+body {
+  margin: 0;
+  background: var(--ci-bg-sunken);
+}
+
+/*
+ * The whole app fits a 13" laptop without horizontal scrolling: 1280 CSS px
+ * with the sidebar collapsed to icons below 1100.
+ */
+.app-shell {
+  display: grid;
+  grid-template-columns: 208px 1fr;
+  grid-template-rows: auto 1fr;
+  min-height: 100dvh;
+}
+
+.app-shell__banner {
+  grid-column: 1 / -1;
+}
+
+.app-shell__sidebar {
+  grid-row: 2;
+  padding: var(--ci-space-3) var(--ci-space-2);
+  background: var(--ci-bg);
+  border-right: 1px solid var(--ci-border);
+}
+
+.app-shell__main {
+  grid-row: 2;
+  min-width: 0;
+  padding: var(--ci-space-5);
+}
+
+@media (width < 1100px) {
+  .app-shell {
+    grid-template-columns: 56px 1fr;
+  }
+
+  .app-nav__label {
+    display: none;
+  }
+}
+
+.app-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-nav__link {
+  display: flex;
+  align-items: center;
+  gap: var(--ci-space-2);
+  height: var(--ci-row-height);
+  padding: 0 var(--ci-space-3);
+  color: var(--ci-fg);
+  text-decoration: none;
+  border-radius: var(--ci-radius);
+}
+
+.app-nav__link:hover {
+  background: var(--ci-bg-subtle);
+}
+
+.app-nav__link[aria-current='page'] {
+  color: var(--ci-accent);
+  background: var(--ci-accent-subtle);
+  font-weight: 600;
+}
+
+.app-nav__badge {
+  margin-left: auto;
+}
+
+/*
+ * Temporary-master chrome. A permanent header strip and an accent used nowhere
+ * else, so a support engineer cannot lose track of whose data they are in.
+ */
+.app-shell--support .app-shell__sidebar {
+  border-top: 3px solid var(--ci-support);
+}
+
+.app-support-strip {
+  padding: var(--ci-space-1) var(--ci-space-4);
+  font-size: var(--ci-text-sm);
+  color: var(--ci-support-fg);
+  background: var(--ci-support);
+}
+
+.page__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ci-space-4);
+  margin-bottom: var(--ci-space-4);
+}
+
+.page__title {
+  margin: 0;
+  font-size: var(--ci-text-xl);
+}
+
+.page__surface {
+  background: var(--ci-bg);
+  border: 1px solid var(--ci-border);
+  border-radius: var(--ci-radius-lg);
+  overflow: hidden;
+}

@@ -1,5 +1,11 @@
 {
   "extends": "./tsconfig.base.json",
-  "compilerOptions": { "noEmit": true },
+  "compilerOptions": {
+    "noEmit": true,
+    // vite/client declares the `*.css` side-effect imports the app makes.
+    // Each app also typechecks itself with its own tsconfig; this root project
+    // exists so `pnpm typecheck` covers packages and apps in one pass.
+    "types": ["vitest/globals", "node", "vite/client"]
+  },
   "include": ["packages/*/src/**/*", "packages/*/test/**/*", "apps/*/src/**/*"]
 }

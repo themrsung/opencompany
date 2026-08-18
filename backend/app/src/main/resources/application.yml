@@ -41,6 +41,21 @@ management:
       show-details: never
 
 coreintra:
+  security:
+    # Encrypts TOTP secrets at rest. No default: a shipped default would encrypt
+    # every installation's secrets under a value that is in the source tree.
+    # Generate with `openssl rand -base64 48`. Include it in backups — losing it
+    # means every user must re-enrol their authenticator.
+    secret-encryption-key: ${COREINTRA_SECRET_ENCRYPTION_KEY:}
+  mail:
+    # Blank host means no mail system. Email OTP and mail notifications are then
+    # HIDDEN rather than offered-and-failing.
+    host: ${COREINTRA_SMTP_HOST:}
+    port: ${COREINTRA_SMTP_PORT:587}
+    username: ${COREINTRA_SMTP_USERNAME:}
+    password: ${COREINTRA_SMTP_PASSWORD:}
+    from: ${COREINTRA_SMTP_FROM:}
+    starttls: true
   installation-name: ${COREINTRA_INSTALLATION_NAME:CoreIntra}
   # Korean is the default locale on a fresh install.
   default-locale: ${COREINTRA_DEFAULT_LOCALE:ko}

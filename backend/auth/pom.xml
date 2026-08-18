@@ -11,6 +11,14 @@
   <artifactId>auth</artifactId>
   <name>CoreIntra :: Auth</name>
   <dependencies>
+    <!-- javax.mail, not jakarta.mail: Boot 2.7 is the javax line (ADR 0001).
+         Optional so an installation with no mail system carries no mail code. -->
+    <dependency>
+      <groupId>com.sun.mail</groupId>
+      <artifactId>javax.mail</artifactId>
+      <version>1.6.2</version>
+      <optional>true</optional>
+    </dependency>
     <dependency><groupId>com.coreintra</groupId><artifactId>platform-compat</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>com.coreintra</groupId><artifactId>business-time</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>com.coreintra</groupId><artifactId>core-domain</artifactId><version>${project.version}</version></dependency>  </dependencies>

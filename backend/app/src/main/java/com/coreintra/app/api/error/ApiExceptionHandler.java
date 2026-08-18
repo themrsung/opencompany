@@ -3,10 +3,12 @@ package com.coreintra.app.api.error;
 import com.coreintra.app.api.http.ETags;
 import com.coreintra.app.api.permission.CurrentPrincipal;
 import com.coreintra.auth.service.AuthenticationService;
+import com.coreintra.auth.service.MasterAccountService;
 import com.coreintra.auth.service.SessionService;
 import com.coreintra.businesstime.BusinessInstantParseException;
 import com.coreintra.compat.Immutables;
 import com.coreintra.core.permission.PermissionDeniedException;
+import com.coreintra.core.service.RecordNotFoundException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -155,6 +157,35 @@ public class ApiExceptionHandler {
                 HttpStatus.BAD_REQUEST.value(),
                 violations.size() + " value(s) failed validation", "validation_failed",
                 violations, null));
+    }
+
+    /**
+     * 404, not 400.
+     *
+     * <p>{@link RecordNotFoundException} extends {@code IllegalArgumentException},
+     * so without this it lands on the handler below and every missing row comes
+     * back as "bad request" — which sends the caller looking for a mistake in
+     * their payload that is not there. Declared above that handler because Spring
+     * picks the most specific match, but the ordering is worth not relying on
+     * implicitly.
+     */
+    @ExceptionHandler(RecordNotFoundException.class)
+    public ResponseEntity<ProblemDetail> onNotFound(RecordNotFoundException e) {
+        return problem(ProblemDetail.of(HttpStatus.NOT_FOUND.value(), "not_found",
+                "Not found", e.getMessage()));
+    }
+
+    /**
+     * 409, not 500.
+     *
+     * <p>Refusing to demote the last master is the system working, not failing.
+     * Unmapped it surfaces as a 500, which tells an administrator the product is
+     * broken at the exact moment it is protecting them.
+     */
+    @ExceptionHandler(MasterAccountService.LastMasterException.class)
+    public ResponseEntity<ProblemDetail> onLastMaster(MasterAccountService.LastMasterException e) {
+        return problem(ProblemDetail.of(HttpStatus.CONFLICT.value(), "last_master",
+                "There must always be a master", e.getMessage()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

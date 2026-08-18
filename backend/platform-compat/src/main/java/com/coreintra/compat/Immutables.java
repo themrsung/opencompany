@@ -126,6 +126,16 @@ public final class Immutables {
         return copyOf(Arrays.asList(elements));
     }
 
+    /**
+     * Set equivalent of {@link #listOfArray}, for a varargs array already in hand.
+     *
+     * <p>Present because {@link #setOf} cannot be called with an existing array
+     * without an unchecked-varargs warning at every call site.
+     */
+    public static <T> Set<T> setOfArray(T[] elements) {
+        return setCopyOf(Arrays.asList(elements));
+    }
+
     private static <T> T requireElement(T element, int index) {
         if (element == null) {
             throw new NullPointerException("null element at index " + index);

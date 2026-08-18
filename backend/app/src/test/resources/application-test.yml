@@ -8,6 +8,14 @@ spring:
   flyway:
     enabled: true
     clean-disabled: false
+coreintra:
+  security:
+    # A fixed, publicly known key, deliberately: it exists only so the test
+    # context can start. Production still refuses to boot without one of its
+    # own (AuthConfiguration#secretCipher), which is the behaviour under test
+    # elsewhere; without this line every integration test would instead depend
+    # on whatever the developer happened to export.
+    secret-encryption-key: test-only-key-never-used-by-any-real-installation
 logging:
   level:
     org.hibernate.SQL: WARN

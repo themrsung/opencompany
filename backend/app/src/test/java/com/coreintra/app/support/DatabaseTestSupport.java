@@ -1,8 +1,6 @@
 package com.coreintra.app.support;
 
 import org.junit.jupiter.api.Assumptions;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
@@ -10,7 +8,7 @@ import org.testcontainers.utility.DockerImageName;
  * Supplies a real PostgreSQL for integration tests. Never H2.
  *
  * <p>H2 disagrees with PostgreSQL about generated columns, domain constraints,
- * {@code text_pattern_ops} indexes and half-open date ranges — every one of
+ * {@code text_pattern_ops} indexes and half-open date ranges - every one of
  * which this schema relies on. A test that passes against H2 tells you nothing
  * about whether the migration works.
  *
@@ -23,6 +21,18 @@ import org.testcontainers.utility.DockerImageName;
  *   <li>Otherwise the test is <b>skipped with a reason</b>, not silently
  *       passed. A green build that ran no integration tests is a lie.</li>
  * </ol>
+ *
+ * <h2>Why system properties rather than {@code @DynamicPropertySource}</h2>
+ *
+ * <p>{@code @DynamicPropertySource} is only discovered on the test class and
+ * its superclasses. On a standalone helper like this one it is never called,
+ * which is a silent failure: the container never starts and Boot quietly falls
+ * back to the {@code localhost:5432} default in {@code application.yml}, so the
+ * suite fails with "connection refused" on a machine that had Docker running
+ * the whole time. {@link #requireDatabase()} is called from {@code @BeforeAll},
+ * which JUnit runs before the Spring context is created, so publishing the
+ * coordinates as system properties gets them into the environment in time and
+ * works no matter how a test class is structured.
  */
 public final class DatabaseTestSupport {
 
@@ -31,6 +41,7 @@ public final class DatabaseTestSupport {
 
     private static PostgreSQLContainer<?> container;
     private static Boolean dockerAvailable;
+    private static boolean published;
 
     private DatabaseTestSupport() {
     }
@@ -41,34 +52,13 @@ public final class DatabaseTestSupport {
         return url != null && !url.trim().isEmpty();
     }
 
-    @DynamicPropertySource
-    static void datasourceProperties(DynamicPropertyRegistry registry) {
-        if (hasExternalDatabase()) {
-            // Boot already reads SPRING_DATASOURCE_* from the environment.
-            return;
-        }
-        PostgreSQLContainer<?> running = startContainer();
-        registry.add("spring.datasource.url", running::getJdbcUrl);
-        registry.add("spring.datasource.username", running::getUsername);
-        registry.add("spring.datasource.password", running::getPassword);
-    }
-
-    private static synchronized PostgreSQLContainer<?> startContainer() {
-        if (container == null) {
-            container = new PostgreSQLContainer<>(IMAGE);
-            // Reused across the suite: starting a container per test class turns
-            // a 30-second run into a 10-minute one.
-            container.withReuse(true);
-            container.start();
-        }
-        return container;
-    }
-
     /**
      * Skips the calling test, with a reason, when no database is reachable.
      *
      * <p>Called from a {@code @BeforeAll} so the skip is visible in the report
-     * rather than the test appearing to have passed.
+     * rather than the test appearing to have passed. When Docker is available
+     * this also starts the container and publishes its coordinates, so the
+     * Spring context that is built moments later connects to it.
      */
     public static void requireDatabase() {
         if (hasExternalDatabase()) {
@@ -76,8 +66,31 @@ public final class DatabaseTestSupport {
         }
         Assumptions.assumeTrue(isDockerAvailable(),
                 "No database available: set SPRING_DATASOURCE_URL, or run a Docker daemon so "
-                        + "Testcontainers can start postgres:16-alpine. Integration tests are "
+                        + "Testcontainers can start postgres:16-alpine. Integration tests "
                         + "skipped rather than passed.");
+        publishContainerProperties();
+    }
+
+    private static synchronized void publishContainerProperties() {
+        if (published) {
+            return;
+        }
+        PostgreSQLContainer<?> running = startContainer();
+        System.setProperty("spring.datasource.url", running.getJdbcUrl());
+        System.setProperty("spring.datasource.username", running.getUsername());
+        System.setProperty("spring.datasource.password", running.getPassword());
+        published = true;
+    }
+
+    private static synchronized PostgreSQLContainer<?> startContainer() {
+        if (container == null) {
+            container = new PostgreSQLContainer<>(IMAGE)
+                    // Reused across the suite: starting a container per test class turns
+                    // a 30-second run into a 10-minute one.
+                    .withReuse(true);
+            container.start();
+        }
+        return container;
     }
 
     private static synchronized boolean isDockerAvailable() {

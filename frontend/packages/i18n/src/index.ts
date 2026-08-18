@@ -2,11 +2,14 @@ import i18next, { type i18n as I18nInstance } from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import { en } from './en.js';
 import { ko } from './ko.js';
+import { screensEn, screensKo } from './screens/index.js';
 
 export { ko } from './ko.js';
 export { en } from './en.js';
 export type { Resources } from './ko.js';
 export type { Translated } from './en.js';
+export { screensKo, screensEn } from './screens/index.js';
+export type { ScreenResources } from './screens/index.js';
 
 /** The locales this product ships. Both are first class; neither is a retrofit. */
 export const SUPPORTED_LOCALES = ['ko', 'en'] as const;
@@ -36,8 +39,13 @@ export function createI18n(locale: Locale = DEFAULT_LOCALE): I18nInstance {
     supportedLngs: SUPPORTED_LOCALES as unknown as string[],
     defaultNS: 'translation',
     resources: {
-      ko: { translation: ko },
-      en: { translation: en },
+      // The shared vocabulary and the per-screen copy are merged into one
+      // namespace, so a component says t('inbox.waitingOnMe') without caring
+      // which file the string came from. The split is a source-tree concern —
+      // it keeps two people building two screens out of one another's diffs —
+      // not something a caller should have to know about.
+      ko: { translation: { ...ko, ...screensKo } },
+      en: { translation: { ...en, ...screensEn } },
     },
     interpolation: {
       // React escapes for us. Double-escaping turns a 사원 name with an

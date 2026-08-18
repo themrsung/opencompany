@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LOCALE, createI18n, en, ko } from '../src/index.js';
+import { DEFAULT_LOCALE, createI18n, en, ko, screensEn, screensKo } from '../src/index.js';
 
 type Leaves = Record<string, string>;
 
@@ -16,8 +16,11 @@ function flatten(source: unknown, prefix = ''): Leaves {
   return out;
 }
 
-const koLeaves = flatten(ko);
-const enLeaves = flatten(en);
+// The screen modules are part of the same namespace at runtime, so they are
+// part of the same parity check here. Splitting the files must not split the
+// guarantee.
+const koLeaves = flatten({ ...ko, ...screensKo });
+const enLeaves = flatten({ ...en, ...screensEn });
 
 describe('the two catalogues describe the same product', () => {
   it('has no key in one language and not the other', () => {

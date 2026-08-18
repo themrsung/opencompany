@@ -11,6 +11,12 @@ make up                 # postgres + api + conversion worker + web
 make seed               # a demo company you can actually click around
 ```
 
+A real installation starts empty instead: `POST /api/v1/install` creates the
+first company and the first master account, returns that account's authenticator
+enrolment **once**, and is then gone — 410, permanently, with the row protected
+by a trigger. Nothing else can open an empty box, deliberately: the grant service
+refuses to hand out a permission the caller does not already hold.
+
 ---
 
 ## There are no passwords
@@ -86,9 +92,21 @@ it cannot quietly stop being true.
 
 ## Status
 
-This is an in-progress build. [STATUS.md](STATUS.md) has the honest
-milestone-by-milestone position, including what is deliberately not there yet —
-most notably the user interface and the REST/MCP API surface.
+[STATUS.md](STATUS.md) has the honest milestone-by-milestone position, and the
+section on what is *not* there is the one worth reading. All fifteen milestones
+are built; the notable gaps are typed field values that cannot yet be saved from
+the browser, the in-app HWP editor, and mdv's inability to produce a Korean PDF
+(its exporter embeds no fonts, so the conversion worker refuses rather than
+emitting one full of question marks).
+
+The API is [144 endpoints](docs/api/openapi.json), OpenAPI 3.1, generated from
+the code. The TypeScript client is generated from that document and CI fails on
+any drift between the two.
+
+[docs/decisions/open-decisions.md](docs/decisions/open-decisions.md) lists every
+open decision with the default that was taken, and marks the three that want a
+human: whether payroll ever lives here, whether mdv becomes the default for
+reports, and what the installer's bootstrap grant set should be.
 
 ## Development
 

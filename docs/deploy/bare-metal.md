@@ -11,7 +11,7 @@ Same artifact, different plumbing. The application does not know which it is.
 | | Version | Notes |
 |---|---|---|
 | JRE | **8 or newer** | The JAR is Java 8 bytecode (ADR 0001). A newer JRE is fine. |
-| PostgreSQL | 16 | 15 works; the schema uses generated columns and `text_pattern_ops`, both long-standing. |
+| PostgreSQL | 16 | **15 is the floor, and it is a hard one.** The document schema uses `UNIQUE NULLS NOT DISTINCT`, which arrived in 15; on 14 the migration fails at apply time rather than misbehaving later, which is the good failure but still a failure. 16 is what is tested and what the container ships. |
 | Node | ≥ 20.11 | Conversion worker only. |
 | LibreOffice | pinned, see below | **Install `libreoffice-writer`, not just `libreoffice-core`.** |
 | nginx | any current | Serves the SPA and proxies `/api`. |

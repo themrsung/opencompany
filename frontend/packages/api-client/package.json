@@ -13,6 +13,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "devDependencies": {
-    "openapi-typescript": "7.13.0"
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3"
   }
 }

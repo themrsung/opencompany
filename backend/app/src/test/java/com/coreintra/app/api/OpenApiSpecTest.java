@@ -11,6 +11,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -79,8 +84,53 @@ class OpenApiSpecTest {
                         + "springdoc.api-docs.version=openapi_3_1 is set")
                 .startsWith("3.1");
 
+        // Written before the assertion, deliberately: when the contract is
+        // broken the first thing anyone needs is the document to look at.
         String rendered = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(document) + "\n";
         writeIfChanged(rendered);
+
+        assertThat(danglingRefs(document))
+                .as("a $ref with no schema behind it makes the generated TypeScript client "
+                        + "refuse to build — and, worse, makes a lenient generator emit `unknown` "
+                        + "and quietly discard the type safety this pipeline exists for. "
+                        + "DanglingSchemaCompleter closes springdoc's array-item gap; if this "
+                        + "list is non-empty, either a DTO's simple name is ambiguous and needs "
+                        + "renaming, or the workaround has stopped being needed and should go.")
+                .isEmpty();
+    }
+
+    /** Every {@code #/components/schemas/X} with no {@code X} defined. */
+    private static List<String> danglingRefs(JsonNode document) {
+        Set<String> defined = new LinkedHashSet<String>();
+        JsonNode schemas = document.path("components").path("schemas");
+        Iterator<String> names = schemas.fieldNames();
+        while (names.hasNext()) {
+            defined.add(names.next());
+        }
+
+        Set<String> referenced = new LinkedHashSet<String>();
+        collectRefs(document, referenced);
+
+        List<String> missing = new ArrayList<String>();
+        for (String name : referenced) {
+            if (!defined.contains(name)) {
+                missing.add(name);
+            }
+        }
+        return missing;
+    }
+
+    private static void collectRefs(JsonNode node, Set<String> into) {
+        if (node.isTextual()) {
+            String text = node.asText();
+            if (text.startsWith("#/components/schemas/")) {
+                into.add(text.substring("#/components/schemas/".length()));
+            }
+            return;
+        }
+        for (JsonNode child : node) {
+            collectRefs(child, into);
+        }
     }
 
     /**

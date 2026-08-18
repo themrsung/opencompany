@@ -10,7 +10,8 @@
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { createRequire } from 'node:module';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -42,11 +43,16 @@ if (spec.trim() === '') {
   process.exit(1);
 }
 
-const generated = execFileSync(
-  process.execPath,
-  [resolve(repoRoot, 'frontend/node_modules/openapi-typescript/bin/cli.js'), specPath],
-  { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
-);
+// Resolved rather than hardcoded: pnpm's isolated layout puts the dependency
+// under this package, not the workspace root, and a hardcoded path is a script
+// that works on one machine's install strategy.
+const require = createRequire(import.meta.url);
+const cli = join(dirname(require.resolve('openapi-typescript/package.json')), 'bin', 'cli.js');
+
+const generated = execFileSync(process.execPath, [cli, specPath], {
+  encoding: 'utf8',
+  maxBuffer: 64 * 1024 * 1024,
+});
 
 mkdirSync(dirname(outputPath), { recursive: true });
 writeFileSync(outputPath, BANNER + generated, 'utf8');

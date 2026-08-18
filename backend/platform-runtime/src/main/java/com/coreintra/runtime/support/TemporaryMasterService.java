@@ -91,6 +91,21 @@ public class TemporaryMasterService {
         return grants.findByAccountId(supportAccountId).orElse(null);
     }
 
+    /**
+     * A grant by its own id, or null.
+     *
+     * <p>Separate from {@link #grantFor(String)} because the two callers ask
+     * opposite questions. The request path asks "is this account a live support
+     * session", thousands of times a minute, and is answered from the account
+     * index. Revoking and reporting ask "which session is this", rarely, and
+     * pay a primary-key lookup rather than making the hot path carry a second
+     * index it never uses.
+     */
+    @Transactional(readOnly = true)
+    public TemporaryMasterGrantRow grantById(String grantId) {
+        return grants.findById(grantId).orElse(null);
+    }
+
     @Transactional(readOnly = true)
     public List<TemporaryMasterGrantRow> activeSessions(String companyId) {
         return grants.findByCompanyIdAndRevokedAtIsNullAndExpiresAtAfter(

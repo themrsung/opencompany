@@ -76,14 +76,20 @@ public final class Pages {
      */
     public static <T, V> CursorPage<V> page(List<T> rows, Keys<T> keys, Function<T, V> view,
             String cursor, Integer limit) {
+        // Validate the request before looking at how much data there is.
+        // Returning early on an empty list meant a corrupt cursor — or a
+        // negative limit — was accepted silently whenever the caller happened to
+        // be able to see nothing, and a client looping on a bad cursor got a
+        // valid-looking empty page instead of being told. Whether input is
+        // well-formed cannot depend on how many rows exist.
+        Cursors.Position from = Cursors.decode(cursor);
+        int size = Cursors.pageSize(limit, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+
         if (rows == null || rows.isEmpty()) {
             return CursorPage.empty();
         }
         List<T> sorted = new ArrayList<T>(rows);
         Collections.sort(sorted, order(keys));
-
-        Cursors.Position from = Cursors.decode(cursor);
-        int size = Cursors.pageSize(limit, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
 
         List<V> items = new ArrayList<V>();
         T last = null;

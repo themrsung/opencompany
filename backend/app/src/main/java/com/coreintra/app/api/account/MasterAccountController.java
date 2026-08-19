@@ -1,6 +1,5 @@
 package com.coreintra.app.api.account;
 
-import com.coreintra.app.api.error.ProblemDetail;
 import com.coreintra.app.api.org.BusinessDates;
 import com.coreintra.app.api.permission.CurrentPrincipal;
 import com.coreintra.auth.service.MasterAccountService;
@@ -12,11 +11,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.LocalDate;
 import javax.validation.Valid;
 import javax.validation.constraints.NotBlank;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -102,30 +98,6 @@ public class MasterAccountController {
 
         masters.demote(subject.id());
         return ResponseEntity.noContent().build();
-    }
-
-    /**
-     * 409, with the service's own bilingual message.
-     *
-     * <p>Handled here rather than in {@code ApiExceptionHandler} because that
-     * class is shared and this agent does not own it. {@code LastMasterException}
-     * extends {@code IllegalStateException}, which nothing maps, so without this
-     * the most important refusal in the authentication model would arrive as a
-     * 500 and read like a bug. A handler on the controller takes precedence over
-     * the global advice, so the mapping is local and does not affect anyone
-     * else's endpoints — but it belongs in the shared handler, and that is
-     * recorded in the handover.
-     *
-     * <p>409 rather than 403: the caller has the authority, the installation is
-     * in a state where the request cannot be honoured. Telling them they lack a
-     * permission would send them looking for a grant that would not help.
-     */
-    @ExceptionHandler(MasterAccountService.LastMasterException.class)
-    public ResponseEntity<ProblemDetail> onLastMaster(MasterAccountService.LastMasterException e) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
-                .body(ProblemDetail.of(HttpStatus.CONFLICT.value(), "last_master",
-                        "The last master cannot be removed", e.getMessage()));
     }
 
     private static LocalDate date(String value) {

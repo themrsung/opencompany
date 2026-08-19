@@ -157,6 +157,32 @@ class PagesTest {
     }
 
     @Test
+    @DisplayName("a bad cursor or limit is refused even when there is nothing to page")
+    void emptyCollectionStillValidatesTheRequest() {
+        final List<String> none = new ArrayList<String>();
+
+        assertThatThrownBy(new org.assertj.core.api.ThrowableAssert.ThrowingCallable() {
+            @Override
+            public void call() {
+                Pages.page(none, KEYS, AS_IS, "not-a-cursor!!", Integer.valueOf(10));
+            }
+        })
+                .as("a client looping on a corrupt cursor was handed a valid-looking empty page "
+                        + "and never told, for as long as it could see no rows")
+                .isInstanceOf(IllegalArgumentException.class);
+
+        assertThatThrownBy(new org.assertj.core.api.ThrowableAssert.ThrowingCallable() {
+            @Override
+            public void call() {
+                Pages.page(none, KEYS, AS_IS, null, Integer.valueOf(0));
+            }
+        })
+                .as("whether a request is well-formed cannot depend on how many rows the caller "
+                        + "happens to be allowed to see — that makes the contract vary by grant")
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     @DisplayName("a sort key containing the cursor separator does not truncate the cursor")
     void separatorInAKeyIsSurvivable() {
         // A 직무 called "영업|해외" is unlikely but not impossible, and the cursor

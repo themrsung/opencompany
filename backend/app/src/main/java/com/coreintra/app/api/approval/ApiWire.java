@@ -165,6 +165,13 @@ public final class ApiWire {
     public static <T, V> CursorPage<V> page(List<T> rows, final Keys<T> keys, Function<T, V> view,
             String cursor, Integer limit) {
 
+        // Validated before the emptiness check: whether a cursor is well-formed
+        // cannot depend on how many rows the caller happens to be able to see.
+        // The other way round, a corrupt cursor came back as a valid empty page
+        // and a client looping on it was never told.
+        Cursors.Position from = Cursors.decode(cursor);
+        int size = Cursors.pageSize(limit, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+
         if (rows == null || rows.isEmpty()) {
             return CursorPage.empty();
         }
@@ -176,9 +183,6 @@ public final class ApiWire {
                 return byKey != 0 ? byKey : key(keys.id(left)).compareTo(key(keys.id(right)));
             }
         });
-
-        Cursors.Position from = Cursors.decode(cursor);
-        int size = Cursors.pageSize(limit, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
 
         List<V> items = new ArrayList<V>();
         T last = null;

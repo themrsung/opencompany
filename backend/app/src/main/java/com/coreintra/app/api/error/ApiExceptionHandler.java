@@ -176,11 +176,17 @@ public class ApiExceptionHandler {
     }
 
     /**
-     * 409, not 500.
+     * 409, not 500 — and not 403 either.
      *
      * <p>Refusing to demote the last master is the system working, not failing.
-     * Unmapped it surfaces as a 500, which tells an administrator the product is
-     * broken at the exact moment it is protecting them.
+     * {@code LastMasterException} extends {@code IllegalStateException}, which
+     * nothing else maps, so unmapped it surfaces as a 500 that tells an
+     * administrator the product is broken at the exact moment it is protecting
+     * them.
+     *
+     * <p>409 rather than 403 because the caller <em>has</em> the authority; the
+     * installation is in a state where the request cannot be honoured. A 403
+     * would send them looking for a grant that would not help.
      */
     @ExceptionHandler(MasterAccountService.LastMasterException.class)
     public ResponseEntity<ProblemDetail> onLastMaster(MasterAccountService.LastMasterException e) {

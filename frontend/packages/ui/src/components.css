@@ -1,0 +1,353 @@
+/*
+ * Styles for the shared primitives.
+ *
+ * Plain CSS on stable class names rather than utilities baked into the JSX, so
+ * that the components stay usable from anywhere and a client theme can be
+ * applied by overriding tokens rather than by forking components.
+ */
+
+/* ------------------------------------------------------------------ Button */
+
+.ci-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ci-space-2);
+  height: var(--ci-control-height);
+  padding: 0 var(--ci-space-3);
+  font: inherit;
+  font-size: var(--ci-text-base);
+  color: var(--ci-fg);
+  background: var(--ci-bg);
+  border: 1px solid var(--ci-border-strong);
+  border-radius: var(--ci-radius);
+  cursor: pointer;
+  transition: background var(--ci-duration-fast), border-color var(--ci-duration-fast);
+  white-space: nowrap;
+}
+
+.ci-button:hover:not(:disabled) {
+  background: var(--ci-bg-subtle);
+}
+
+.ci-button:disabled {
+  color: var(--ci-fg-faint);
+  cursor: not-allowed;
+  background: var(--ci-bg-subtle);
+}
+
+.ci-button--primary {
+  color: var(--ci-accent-fg);
+  background: var(--ci-accent);
+  border-color: var(--ci-accent);
+}
+
+.ci-button--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ci-accent) 88%, black);
+}
+
+.ci-button--danger {
+  color: #fff;
+  background: var(--ci-danger);
+  border-color: var(--ci-danger);
+}
+
+.ci-button--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ci-danger) 88%, black);
+}
+
+.ci-button--support {
+  color: var(--ci-support-fg);
+  background: var(--ci-support);
+  border-color: var(--ci-support);
+}
+
+.ci-button--busy {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+/* ------------------------------------------------------------------ Banner */
+
+.ci-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ci-space-3);
+  padding: var(--ci-space-3) var(--ci-space-4);
+  border: 1px solid var(--ci-border);
+  border-left-width: 3px;
+  border-radius: var(--ci-radius);
+  background: var(--ci-bg-subtle);
+}
+
+.ci-banner__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ci-banner__title {
+  display: block;
+  margin-bottom: var(--ci-space-1);
+}
+
+.ci-banner__actions {
+  display: flex;
+  gap: var(--ci-space-2);
+  flex-shrink: 0;
+}
+
+.ci-banner__dismiss {
+  padding: 0 var(--ci-space-2);
+  font-size: var(--ci-text-lg);
+  line-height: 1;
+  color: var(--ci-fg-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.ci-banner--info {
+  border-left-color: var(--ci-accent);
+  background: var(--ci-accent-subtle);
+}
+
+.ci-banner--positive {
+  border-left-color: var(--ci-positive);
+  background: var(--ci-positive-subtle);
+}
+
+.ci-banner--warning {
+  border-left-color: var(--ci-warning);
+  background: var(--ci-warning-subtle);
+}
+
+.ci-banner--danger {
+  border-left-color: var(--ci-danger);
+  background: var(--ci-danger-subtle);
+}
+
+.ci-banner--support {
+  border-left-color: var(--ci-support);
+  background: var(--ci-support-subtle);
+}
+
+/* ------------------------------------------------------------------- Field */
+
+.ci-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ci-space-1);
+}
+
+.ci-field__label {
+  font-size: var(--ci-text-sm);
+  color: var(--ci-fg-muted);
+}
+
+.ci-field__input {
+  height: var(--ci-control-height);
+  padding: 0 var(--ci-space-2);
+  font: inherit;
+  color: var(--ci-fg);
+  background: var(--ci-bg);
+  border: 1px solid var(--ci-border-strong);
+  border-radius: var(--ci-radius);
+}
+
+.ci-field--invalid .ci-field__input {
+  border-color: var(--ci-danger);
+}
+
+.ci-field__hint {
+  margin: 0;
+  font-size: var(--ci-text-sm);
+  color: var(--ci-fg-muted);
+}
+
+.ci-field__error {
+  margin: 0;
+  font-size: var(--ci-text-sm);
+  color: var(--ci-danger);
+}
+
+/* --------------------------------------------------- Business instant field */
+
+.ci-bi-field {
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.ci-bi-field__legend {
+  padding: 0;
+  font-size: var(--ci-text-sm);
+  color: var(--ci-fg-muted);
+}
+
+.ci-bi-field__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ci-space-2);
+  align-items: center;
+}
+
+.ci-bi-field__label {
+  font-size: var(--ci-text-sm);
+  color: var(--ci-fg-muted);
+}
+
+.ci-bi-field__date,
+.ci-bi-field__clock {
+  height: var(--ci-control-height);
+  padding: 0 var(--ci-space-2);
+  font: inherit;
+  border: 1px solid var(--ci-border-strong);
+  border-radius: var(--ci-radius);
+}
+
+.ci-bi-field__clock {
+  width: 9ch;
+}
+
+.ci-bi-field__hint,
+.ci-bi-field__resolved {
+  margin: var(--ci-space-1) 0 0;
+  font-size: var(--ci-text-sm);
+  color: var(--ci-fg-muted);
+}
+
+.ci-bi-field__resolved {
+  color: var(--ci-warning);
+}
+
+.ci-bi-field__error {
+  margin: var(--ci-space-1) 0 0;
+  font-size: var(--ci-text-sm);
+  color: var(--ci-danger);
+}
+
+.ci-bi-text--outside {
+  /* A time outside the calendar day is correct and normal here, but it is worth
+     a glance: an underline says "this is deliberate", a colour would say "wrong". */
+  text-decoration: underline dotted var(--ci-fg-faint);
+  text-underline-offset: 3px;
+}
+
+/* ------------------------------------------------------------------ Amount */
+
+.ci-amount__currency {
+  color: var(--ci-fg-muted);
+}
+
+.ci-amount__expand {
+  padding: 0 2px;
+  margin-left: 2px;
+  font: inherit;
+  color: var(--ci-fg-faint);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.ci-amount--abbreviated .ci-amount__figure {
+  /* The abbreviation is marked on the figure itself, so a rounded number can
+     never be mistaken for an exact one no matter which column it lands in. */
+  text-decoration: underline dotted var(--ci-fg-faint);
+  text-underline-offset: 3px;
+}
+
+.ci-amount--invalid {
+  color: var(--ci-danger);
+}
+
+/* ------------------------------------------------------------------- Badge */
+
+.ci-badge {
+  display: inline-block;
+  padding: 1px var(--ci-space-2);
+  font-size: var(--ci-text-xs);
+  border: 1px solid var(--ci-border);
+  border-radius: 999px;
+  background: var(--ci-bg-subtle);
+  white-space: nowrap;
+}
+
+.ci-badge--positive {
+  color: var(--ci-positive);
+  background: var(--ci-positive-subtle);
+  border-color: transparent;
+}
+
+.ci-badge--warning {
+  color: var(--ci-warning);
+  background: var(--ci-warning-subtle);
+  border-color: transparent;
+}
+
+.ci-badge--danger {
+  color: var(--ci-danger);
+  background: var(--ci-danger-subtle);
+  border-color: transparent;
+}
+
+.ci-badge--accent {
+  color: var(--ci-accent);
+  background: var(--ci-accent-subtle);
+  border-color: transparent;
+}
+
+.ci-badge--support {
+  color: var(--ci-support);
+  background: var(--ci-support-subtle);
+  border-color: transparent;
+}
+
+/* ------------------------------------------------------------------- Table */
+
+.ci-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--ci-text-base);
+}
+
+.ci-table th,
+.ci-table td {
+  height: var(--ci-row-height);
+  padding: 0 var(--ci-space-3);
+  text-align: left;
+  border-bottom: 1px solid var(--ci-border);
+}
+
+.ci-table th {
+  font-weight: 600;
+  color: var(--ci-fg-muted);
+  background: var(--ci-bg-subtle);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.ci-table th.ci-numeric,
+.ci-table td.ci-numeric {
+  text-align: right;
+}
+
+.ci-table__row--activatable {
+  cursor: pointer;
+}
+
+.ci-table__row--activatable:hover {
+  background: var(--ci-bg-subtle);
+}
+
+/* ------------------------------------------------------------------- Empty */
+
+.ci-empty {
+  padding: var(--ci-space-6);
+  text-align: center;
+  color: var(--ci-fg-muted);
+}
+
+.ci-empty__message {
+  margin: 0 0 var(--ci-space-3);
+}

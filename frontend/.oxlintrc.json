@@ -1,0 +1,73 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/node_modules/**",
+    "packages/api-client/src/schema.d.ts"
+  ],
+  "plugins": [
+    "typescript",
+    "react",
+    "oxc"
+  ],
+  "env": {
+    "browser": true,
+    "es2024": true,
+    "node": true
+  },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "warn"
+  },
+  "rules": {
+    "typescript/no-explicit-any": "error",
+    "typescript/consistent-type-imports": "error",
+    "typescript/no-non-null-assertion": "error",
+    "no-restricted-globals": [
+      "error",
+      {
+        "name": "parseFloat",
+        "message": "Amounts are exact decimal strings. Use @coreintra/money."
+      }
+    ],
+    "eqeqeq": [
+      "error",
+      "smart"
+    ],
+    "no-console": [
+      "error",
+      {
+        "allow": [
+          "warn",
+          "error"
+        ]
+      }
+    ],
+    "no-var": "error",
+    "prefer-const": "error",
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "error",
+    "react/react-in-jsx-scope": "off"
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/test/**/*.ts",
+        "**/test/**/*.tsx"
+      ],
+      "rules": {
+        "typescript/no-non-null-assertion": "off",
+        "no-console": "off"
+      }
+    },
+    {
+      "files": [
+        "**/scripts/**/*.mjs"
+      ],
+      "rules": {
+        "no-console": "off"
+      }
+    }
+  ]
+}

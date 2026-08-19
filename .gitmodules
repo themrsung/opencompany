@@ -1,0 +1,3 @@
+[submodule "vendor/mdv"]
+	path = vendor/mdv
+	url = https://github.com/themrsung/mdv

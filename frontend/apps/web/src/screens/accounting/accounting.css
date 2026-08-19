@@ -1,0 +1,277 @@
+/*
+ * Accounting-screen layout.
+ *
+ * Plain CSS on `acc-` class names rather than utilities in the JSX, matching
+ * the shared primitives: the tokens are the same ones `tokens.css` defines, so
+ * a ledger table and an approval table cannot drift apart. Nothing here
+ * restyles a `ci-` class — those belong to `@coreintra/ui`.
+ *
+ * Density is the point. A 지출결의서 is read in columns of digits, so rows stay
+ * at the shared row height, numbers keep their tabular figures, and the whole
+ * area fits 1280px without a horizontal scrollbar.
+ */
+
+.acc-bookbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--ci-space-3);
+  margin-bottom: var(--ci-space-3);
+}
+
+.acc-bookbar__field {
+  min-width: 12rem;
+}
+
+.acc-bookbar__base,
+.acc-bookbar__hint {
+  margin: 0 0 var(--ci-space-1);
+  font-size: var(--ci-text-sm);
+}
+
+.acc-bookbar__hint {
+  margin-inline-start: auto;
+}
+
+.acc-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ci-space-3);
+}
+
+/* Tabs ------------------------------------------------------------------- */
+
+.acc-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ci-space-1);
+  margin-bottom: var(--ci-space-3);
+  border-bottom: 1px solid var(--ci-border);
+}
+
+.acc-tab {
+  display: inline-flex;
+  align-items: center;
+  height: var(--ci-row-height);
+  padding: 0 var(--ci-space-3);
+  color: var(--ci-fg-muted);
+  font-size: var(--ci-text-base);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+
+.acc-tab:hover {
+  color: var(--ci-fg);
+  background: var(--ci-bg-subtle);
+}
+
+.acc-tab--active,
+.acc-tab[aria-current='page'] {
+  color: var(--ci-accent);
+  font-weight: 600;
+  border-bottom-color: var(--ci-accent);
+}
+
+/* Surfaces --------------------------------------------------------------- */
+
+.acc-surface {
+  padding: var(--ci-space-4);
+}
+
+.acc-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20rem;
+  gap: var(--ci-space-4);
+  align-items: start;
+}
+
+@media (width < 1200px) {
+  .acc-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.acc-panel {
+  padding: var(--ci-space-3);
+  background: var(--ci-bg-subtle);
+  border: 1px solid var(--ci-border);
+  border-radius: var(--ci-radius);
+}
+
+.acc-panel__title {
+  margin: 0 0 var(--ci-space-2);
+  font-size: var(--ci-text-lg);
+}
+
+.acc-section-title {
+  margin: var(--ci-space-4) 0 var(--ci-space-2);
+  font-size: var(--ci-text-base);
+  text-transform: none;
+}
+
+.acc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--ci-space-3);
+  margin-bottom: var(--ci-space-3);
+}
+
+.acc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ci-space-2);
+  margin: var(--ci-space-3) 0;
+}
+
+.acc-note {
+  margin: 0 0 var(--ci-space-2);
+  color: var(--ci-fg-muted);
+  font-size: var(--ci-text-sm);
+}
+
+.acc-muted {
+  color: var(--ci-fg-muted);
+  font-size: var(--ci-text-sm);
+}
+
+.acc-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ci-space-2);
+  font-size: var(--ci-text-sm);
+  white-space: nowrap;
+}
+
+/* Forms ------------------------------------------------------------------ */
+
+.acc-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ci-space-3);
+  padding: var(--ci-space-3);
+  margin-bottom: var(--ci-space-4);
+  background: var(--ci-bg-subtle);
+  border: 1px solid var(--ci-border);
+  border-radius: var(--ci-radius);
+}
+
+.acc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--ci-space-3);
+}
+
+/* The posting grid ------------------------------------------------------- */
+
+.acc-postings {
+  width: 100%;
+}
+
+.acc-postings td {
+  vertical-align: top;
+}
+
+.acc-postings .ci-field__input {
+  width: 100%;
+  min-width: 5rem;
+}
+
+.acc-postings .ci-field__error {
+  white-space: normal;
+}
+
+/* Statements ------------------------------------------------------------- */
+
+.acc-figures {
+  display: grid;
+  gap: 2px;
+  margin: var(--ci-space-3) 0;
+}
+
+.acc-figures__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--ci-space-4);
+  padding: 0 var(--ci-space-2);
+  min-height: var(--ci-row-height);
+  align-items: center;
+  border-bottom: 1px solid var(--ci-border);
+}
+
+.acc-figures__row dt {
+  color: var(--ci-fg-muted);
+}
+
+.acc-figures__row dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+/*
+ * A statement whose `balanced` flag came back false. The figures are still
+ * shown — hiding them would help nobody — but they are marked as not to be
+ * trusted, so that nothing on the screen reads like a clean total.
+ */
+.acc-statement--suspect {
+  padding: var(--ci-space-2);
+  border: 1px dashed var(--ci-danger);
+  border-radius: var(--ci-radius);
+  background: var(--ci-danger-subtle);
+}
+
+.acc-total {
+  margin: var(--ci-space-3) 0;
+  font-size: var(--ci-text-base);
+}
+
+.acc-entry-head {
+  margin-bottom: var(--ci-space-3);
+}
+
+.acc-entry-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ci-space-3);
+}
+
+.acc-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--ci-space-1) var(--ci-space-3);
+  margin: 0 0 var(--ci-space-3);
+  font-size: var(--ci-text-sm);
+}
+
+.acc-facts dt {
+  color: var(--ci-fg-muted);
+}
+
+.acc-facts dd {
+  margin: 0;
+}
+
+.acc-inline-list {
+  margin: 0;
+  padding-inline-start: var(--ci-space-4);
+}
+
+.acc-details {
+  margin-bottom: var(--ci-space-3);
+}
+
+.acc-pre {
+  margin: 0;
+  padding: var(--ci-space-2);
+  overflow-x: auto;
+  font-family: var(--ci-font-mono);
+  font-size: var(--ci-text-xs);
+  background: var(--ci-bg-sunken);
+  border-radius: var(--ci-radius);
+}
+
+.acc-preview {
+  padding-top: var(--ci-space-3);
+  border-top: 1px solid var(--ci-border);
+}

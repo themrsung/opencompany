@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  // Typecheck only. Every workspace package is consumed as TypeScript source —
+  // `main` and `types` both point at src/index.ts, and Vite compiles it as part
+  // of the app — so emitting declarations would produce a dist nobody imports,
+  // and `rootDir` would then fail the moment one package imported another.
+  "compilerOptions": { "noEmit": true },
+  "include": ["src/**/*"]
+}

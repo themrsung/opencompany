@@ -1,0 +1,95 @@
+package com.coreintra.app.api.org;
+
+import com.coreintra.app.api.http.ETags;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+
+/**
+ * Entity tags for the org resources, derived from their state.
+ *
+ * <h2>Why this is not a version counter</h2>
+ *
+ * <p>{@link ETags} is written for a monotonically increasing row version, which
+ * is the right thing: it makes a tag change when a row changes and never
+ * otherwise. The org tables carry no such column — {@code V2__org_and_permissions.sql}
+ * has {@code created_at} and nothing else, no {@code @Version} field exists on
+ * {@code Company}, {@code OrgUnit}, {@code Rank}, {@code JobFunction},
+ * {@code Employee} or {@code Position}, and adding one is a migration this agent
+ * does not own.
+ *
+ * <p>So the "version" handed to {@link ETags#of(String, long)} is a 64-bit
+ * FNV-1a hash of the fields a client can change. That preserves the property
+ * the API actually depends on — a concurrent edit invalidates the tag, so the
+ * second writer gets a 412 instead of silently discarding the first — and loses
+ * only strict monotonicity: an edit followed by an exact revert produces the
+ * earlier tag again, and a stale {@code If-Match} from before both would be
+ * accepted. That window is a real, if narrow, gap and it is recorded in this
+ * agent's report; the fix is a version column, not a cleverer hash.
+ *
+ * <p>Hashing the <em>fields</em> rather than the serialised DTO is deliberate
+ * for the reason {@link ETags} gives: a tag derived from the rendered response
+ * would depend on the caller's locale and on which optional fields were
+ * populated, so two clients looking at the same row would hold different tags
+ * and block each other for no reason.
+ */
+public final class OrgVersions {
+
+    private static final long FNV_OFFSET_BASIS = 0xcbf29ce484222325L;
+    private static final long FNV_PRIME = 0x100000001b3L;
+
+    /** Separates fields, so that ("ab", "c") and ("a", "bc") are different states. */
+    private static final char FIELD_SEPARATOR = '\u001f';
+
+    /** Distinguishes a null field from an empty one. */
+    private static final String NULL = "\u0000";
+
+    private OrgVersions() {
+    }
+
+    /**
+     * The tag for one resource.
+     *
+     * @param resourceId the row id, which the tag is salted with so that two
+     *        rows in identical states do not share a tag
+     * @param state every field a mutation can change; order matters and must be
+     *        stable across calls, so callers list them literally rather than
+     *        iterating a map
+     */
+    public static String tag(String resourceId, Object... state) {
+        return ETags.of(resourceId, version(state));
+    }
+
+    /** The state hash on its own, for callers that need the number. */
+    public static long version(Object... state) {
+        long hash = FNV_OFFSET_BASIS;
+        for (Object field : state) {
+            hash = mix(hash, render(field));
+            hash = mix(hash, Character.toString(FIELD_SEPARATOR));
+        }
+        // Kept non-negative: the tag is read by humans in logs and a minus sign
+        // in the middle of "1234-a1b2c3" reads as a delimiter.
+        return hash & 0x7fffffffffffffffL;
+    }
+
+    private static String render(Object field) {
+        if (field == null) {
+            return NULL;
+        }
+        if (field instanceof LocalDate || field instanceof OffsetDateTime) {
+            return field.toString();
+        }
+        if (field instanceof Enum<?>) {
+            return ((Enum<?>) field).name();
+        }
+        return String.valueOf(field);
+    }
+
+    private static long mix(long hash, String value) {
+        long mixed = hash;
+        for (int i = 0; i < value.length(); i++) {
+            mixed ^= value.charAt(i);
+            mixed *= FNV_PRIME;
+        }
+        return mixed;
+    }
+}

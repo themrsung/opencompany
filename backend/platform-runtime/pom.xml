@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>com.coreintra</groupId>
+    <artifactId>coreintra-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+  <artifactId>platform-runtime</artifactId>
+  <name>CoreIntra :: Platform Runtime</name>
+  <dependencies>
+    <dependency><groupId>com.coreintra</groupId><artifactId>platform-compat</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>com.coreintra</groupId><artifactId>business-time</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>com.coreintra</groupId><artifactId>core-domain</artifactId><version>${project.version}</version></dependency>
+    <!-- Deliberately nothing else from this tree. The audit log records what
+         auth, approval and the feature modules did, so a dependency in that
+         direction would be a cycle waiting to be discovered: everything can
+         depend on the runtime, and the runtime depends on nobody's domain. -->
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-jpa</artifactId></dependency>
+  </dependencies>
+</project>

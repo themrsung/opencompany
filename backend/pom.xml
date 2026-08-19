@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!--
+    CoreIntra backend reactor.
+
+    Java 8 is a deliberate, load-bearing constraint (brief SS1): client sites run
+    ancient JREs. Everything that is sensitive to the Java version lives in
+    platform-compat, so a future bump to 17/21 means editing <release>, the Boot
+    version, and javax->jakarta - nothing else conceptually.
+  -->
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>2.7.18</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>com.coreintra</groupId>
+  <artifactId>coreintra-parent</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+  <name>CoreIntra</name>
+  <description>Self-hosted B2B intranet platform</description>
+
+  <modules>
+    <module>platform-compat</module>
+    <module>business-time</module>
+    <module>core-domain</module>
+    <module>auth</module>
+    <module>approval</module>
+    <module>attendance</module>
+    <module>documents</module>
+    <module>accounting</module>
+    <module>module-api</module>
+    <module>platform-runtime</module>
+    <module>app</module>
+  </modules>
+
+  <properties>
+    <!-- THE version decision. See docs/adr/0001-java-8-baseline.md -->
+    <java.version>8</java.version>
+    <maven.compiler.release>8</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+    <!-- Versions verified against Maven Central at scaffold time (brief SS0.3). -->
+    <archunit.version>1.5.0</archunit.version>
+    <testcontainers.version>1.21.4</testcontainers.version>
+    <poi.version>5.5.1</poi.version>
+    <hwpxlib.version>1.0.9</hwpxlib.version>
+    <hwplib.version>1.1.10</hwplib.version>
+    <enforcer.plugin.version>3.6.3</enforcer.plugin.version>
+    <animal.sniffer.version>1.27</animal.sniffer.version>
+    <jacoco.version>0.8.12</jacoco.version>
+    <!--
+      flyway-core 13.x is compiled for Java 17 (class major 61) and cannot load
+      on a Java 8 JRE. 8.5.13 is the version Boot 2.7.18 manages and is major 52.
+      Do not "upgrade" this without re-checking the class file version.
+    -->
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>com.tngtech.archunit</groupId>
+        <artifactId>archunit-junit5</artifactId>
+        <version>${archunit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.testcontainers</groupId>
+        <artifactId>testcontainers-bom</artifactId>
+        <version>${testcontainers.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.poi</groupId>
+        <artifactId>poi-ooxml</artifactId>
+        <version>${poi.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>kr.dogfoot</groupId>
+        <artifactId>hwpxlib</artifactId>
+        <version>${hwpxlib.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>kr.dogfoot</groupId>
+        <artifactId>hwplib</artifactId>
+        <version>${hwplib.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>animal-sniffer-maven-plugin</artifactId>
+          <version>${animal.sniffer.version}</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <!--
+            <release> (not source/target) is what makes javac refuse Java 9+ APIs
+            at compile time rather than at runtime on a client's JRE.
+          -->
+          <release>${maven.compiler.release}</release>
+          <compilerArgs>
+            <arg>-Xlint:all,-processing,-serial</arg>
+          </compilerArgs>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <!--
+            Surefire's default includes are *Test / Test* / *Tests / *TestCase.
+            jqwik property classes are named *Properties by convention, so
+            without this they are collected by nobody and pass by not running -
+            which is strictly worse than having no property tests at all.
+          -->
+          <includes>
+            <include>**/*Test.java</include>
+            <include>**/*Tests.java</include>
+            <include>**/*TestCase.java</include>
+            <include>**/*Properties.java</include>
+            <include>**/*IT.java</include>
+          </includes>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <version>${enforcer.plugin.version}</version>
+        <executions>
+          <execution>
+            <id>enforce-java-8-baseline</id>
+            <goals><goal>enforce</goal></goals>
+            <configuration>
+              <rules>
+                <requireMavenVersion><version>[3.8.0,)</version></requireMavenVersion>
+                <!-- Build on any modern JDK; <release> pins the output. -->
+                <requireJavaVersion><version>[1.8,)</version></requireJavaVersion>
+                <bannedDependencies>
+                  <searchTransitive>true</searchTransitive>
+                  <excludes>
+                    <!-- Boot 2.7 is javax.*; a jakarta.* artifact on the path is a
+                         mis-resolved dependency, not an upgrade. -->
+                    <exclude>jakarta.servlet:jakarta.servlet-api:[5.0.0,)</exclude>
+                    <exclude>jakarta.persistence:jakarta.persistence-api:[3.0.0,)</exclude>
+                    <exclude>jakarta.validation:jakarta.validation-api:[3.0.0,)</exclude>
+                  </excludes>
+                </bannedDependencies>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!--
+        animal-sniffer is the real gate: <release> checks the JDK API surface,
+        animal-sniffer checks it again against the published java18 signature so
+        a Java 9+ method that sneaks in through a shaded dependency still fails
+        the build here rather than on a client's box.
+      -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>animal-sniffer-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>check-java-8-signature</id>
+            <phase>test</phase>
+            <goals><goal>check</goal></goals>
+            <configuration>
+              <signature>
+                <groupId>org.codehaus.mojo.signature</groupId>
+                <artifactId>java18</artifactId>
+                <version>1.0</version>
+              </signature>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>${jacoco.version}</version>
+        <executions>
+          <execution><goals><goal>prepare-agent</goal></goals></execution>
+          <execution><id>report</id><phase>verify</phase><goals><goal>report</goal></goals></execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

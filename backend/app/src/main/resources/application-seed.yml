@@ -1,0 +1,33 @@
+# The demo seed profile. Nothing here is loaded by a normal boot.
+#
+# `make seed` runs the same jar with `--spring.profiles.active=seed` and
+# `--spring.main.web-application-type=none`, so the process seeds, prints its
+# report and exits instead of racing the running API for port 8080. The web
+# switch is on the command line rather than here because this file is also the
+# profile an integration test activates, and a test that wants a web context
+# should not have one taken away by a property it cannot see.
+
+spring:
+  flyway:
+    # The seed runs against a schema that is already migrated in the normal case,
+    # but on a bare database it has to be able to create one first — otherwise
+    # `make up && make seed` in quick succession is a race.
+    enabled: true
+
+coreintra:
+  # The accounting switch is deliberately NOT set here. An installation that has
+  # turned the module off has said something about itself, and a seed that turned
+  # it back on for its own convenience would be seeding a company the operator
+  # did not ask for. The ledger step is skipped and reported instead — "boots and
+  # demos fine without accounting" is a promise this product makes.
+  seed:
+    # The runner seeds on start-up. The integration test sets this to false so
+    # it can drive the seed itself and run it twice.
+    run-on-start: true
+
+logging:
+  level:
+    com.coreintra.app.seed: INFO
+    # The seed makes a few thousand service calls; SQL at DEBUG turns its output
+    # into something nobody reads.
+    org.hibernate.SQL: WARN

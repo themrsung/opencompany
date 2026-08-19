@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>com.coreintra</groupId>
+    <artifactId>coreintra-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+  <artifactId>documents</artifactId>
+  <name>CoreIntra :: Documents</name>
+  <dependencies>
+    <dependency><groupId>com.coreintra</groupId><artifactId>platform-compat</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>com.coreintra</groupId><artifactId>business-time</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>com.coreintra</groupId><artifactId>core-domain</artifactId><version>${project.version}</version></dependency>    <dependency><groupId>org.apache.poi</groupId><artifactId>poi-ooxml</artifactId></dependency>
+    <dependency><groupId>kr.dogfoot</groupId><artifactId>hwpxlib</artifactId></dependency>
+    <dependency><groupId>kr.dogfoot</groupId><artifactId>hwplib</artifactId></dependency>
+    <!-- The rule "no public method here returns a signature's bytes" has to hold for
+         classes nobody has written yet, so it is checked against the compiled package
+         rather than against a list somebody maintains. Version comes from the parent. -->
+    <dependency>
+      <groupId>com.tngtech.archunit</groupId>
+      <artifactId>archunit-junit5</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

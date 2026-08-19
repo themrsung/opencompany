@@ -1,0 +1,122 @@
+spring:
+  application:
+    name: coreintra
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/coreintra}
+    username: ${SPRING_DATASOURCE_USERNAME:coreintra}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    hikari:
+      # ~300 concurrent users on 4 vCPU. More connections than cores does not
+      # make Postgres faster; it makes it thrash. See docs/deploy/sizing.md.
+      maximum-pool-size: 20
+      minimum-idle: 4
+  jpa:
+    open-in-view: false        # a lazy load in a view renderer is a query nobody authorised
+    hibernate:
+      ddl-auto: validate       # Flyway owns the schema; Hibernate only checks it matches
+    properties:
+      hibernate:
+        jdbc.time_zone: UTC
+        format_sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # Fail rather than guess if the schema was hand-edited on a client's box.
+    validate-on-migrate: true
+  jackson:
+    default-property-inclusion: non_null
+
+server:
+  port: ${COREINTRA_HTTP_PORT:8080}
+  error:
+    include-message: never     # errors go through the RFC 7807 handler, not Boot's default page
+
+springdoc:
+  api-docs:
+    # OpenAPI 3.1, which springdoc 1.x emits only when asked; the default is
+    # 3.0.1. The brief specifies 3.1 and the generated TypeScript client is
+    # produced from this document, so the version is part of the contract.
+    version: openapi_3_1
+    path: /v3/api-docs
+  swagger-ui:
+    # Off by default. It is a developer convenience, and an on-prem box should
+    # not serve an interactive API console to anyone who finds the port.
+    enabled: ${COREINTRA_SWAGGER_UI_ENABLED:false}
+  # Deterministic ordering, so the committed spec does not churn between runs
+  # and a diff in a pull request means something changed.
+  writer-with-order-by-keys: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+coreintra:
+  security:
+    # Encrypts TOTP secrets at rest. No default: a shipped default would encrypt
+    # every installation's secrets under a value that is in the source tree.
+    # Generate with `openssl rand -base64 48`. Include it in backups — losing it
+    # means every user must re-enrol their authenticator.
+    secret-encryption-key: ${COREINTRA_SECRET_ENCRYPTION_KEY:}
+  mail:
+    # Blank host means no mail system. Email OTP and mail notifications are then
+    # HIDDEN rather than offered-and-failing.
+    host: ${COREINTRA_SMTP_HOST:}
+    port: ${COREINTRA_SMTP_PORT:587}
+    username: ${COREINTRA_SMTP_USERNAME:}
+    password: ${COREINTRA_SMTP_PASSWORD:}
+    from: ${COREINTRA_SMTP_FROM:}
+    starttls: true
+  installation-name: ${COREINTRA_INSTALLATION_NAME:CoreIntra}
+  # Korean is the default locale on a fresh install.
+  default-locale: ${COREINTRA_DEFAULT_LOCALE:ko}
+  blob-path: ${COREINTRA_BLOB_PATH:/var/lib/coreintra/blobs}
+  font-path: ${COREINTRA_FONT_PATH:/var/lib/coreintra/fonts}
+  conversion:
+    url: ${COREINTRA_CONVERSION_URL:http://localhost:3000}
+    sync-timeout-ms: ${COREINTRA_CONVERSION_SYNC_TIMEOUT_MS:8000}
+  accounting:
+    # When false the module's tables, endpoints, MCP tools and UI are absent.
+    enabled: ${COREINTRA_ACCOUNTING_ENABLED:true}
+  support:
+    # Refuses issuance for this boot. The permanent kill switch (§8) is a row in
+    # temporary_master_switch, not this: a setting can be edited back, and
+    # "permanently" has to survive someone with a text editor and a deadline.
+    temporary-master-disabled: ${COREINTRA_TEMPORARY_MASTER_DISABLED:false}
+  webhooks:
+    dispatcher:
+      # The dispatcher runs inside this process. Passes cannot overlap, so one
+      # slow subscriber delays the queue rather than multiplying threads. Set
+      # false on every box but one if this is ever deployed more than once.
+      enabled: ${COREINTRA_WEBHOOK_DISPATCHER_ENABLED:true}
+      interval-ms: ${COREINTRA_WEBHOOK_DISPATCH_INTERVAL_MS:5000}
+      # Long enough for Flyway and the context to finish on a cold start.
+      initial-delay-ms: ${COREINTRA_WEBHOOK_DISPATCH_INITIAL_DELAY_MS:20000}
+    retry:
+      # Exponential from base to cap, then a bounded number of attempts and we
+      # stop. Eight attempts over roughly an hour: long enough for a restart,
+      # short enough that a dead endpoint stops costing anything. Retrying
+      # forever is not a delivery policy.
+      base-seconds: ${COREINTRA_WEBHOOK_RETRY_BASE_SECONDS:30}
+      cap-seconds: ${COREINTRA_WEBHOOK_RETRY_CAP_SECONDS:1800}
+      max-attempts: ${COREINTRA_WEBHOOK_RETRY_MAX_ATTEMPTS:8}
+    # Both are set deliberately: an endpoint that accepts a connection and then
+    # never answers would otherwise hold the dispatcher until the JVM restarts.
+    connect-timeout-ms: ${COREINTRA_WEBHOOK_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms: ${COREINTRA_WEBHOOK_READ_TIMEOUT_MS:10000}
+    # Written to webhook_delivery.claimed_by, so a log line can be traced to a box.
+    worker-name: ${COREINTRA_WEBHOOK_WORKER_NAME:app}
+  rate-limits:
+    # Counters are in memory; only the policies live in the database. This is
+    # how long a changed policy takes to be noticed, traded against a query on
+    # every request.
+    policy-refresh-seconds: ${COREINTRA_RATE_LIMIT_POLICY_REFRESH_SECONDS:60}
+
+logging:
+  level:
+    root: INFO
+    com.coreintra: INFO

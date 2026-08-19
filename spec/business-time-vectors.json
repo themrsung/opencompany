@@ -1,0 +1,193 @@
+{
+  "$comment": [
+    "Shared conformance vectors for BusinessInstant, consumed by BOTH the Java",
+    "implementation (backend/business-time) and the TypeScript one",
+    "(frontend/packages/business-time).",
+    "",
+    "Two implementations of a time model drift. The only reliable defence is a",
+    "single set of vectors that both test suites load, so a change to one side's",
+    "behaviour fails the other side's build. Add a case here first, then make",
+    "both sides pass it."
+  ],
+  "valid": [
+    {
+      "wire": "2026-08-30T09:30:00.000",
+      "date": "2026-08-30",
+      "offsetSeconds": 34200,
+      "outsideCalendarDay": false,
+      "absolute": "2026-08-30T09:30:00"
+    },
+    {
+      "wire": "2026-08-30T00:00:00.000",
+      "date": "2026-08-30",
+      "offsetSeconds": 0,
+      "outsideCalendarDay": false,
+      "absolute": "2026-08-30T00:00:00"
+    },
+    {
+      "wire": "2026-08-30T27:00:00.000",
+      "date": "2026-08-30",
+      "offsetSeconds": 97200,
+      "outsideCalendarDay": true,
+      "absolute": "2026-08-31T03:00:00"
+    },
+    {
+      "wire": "2026-08-30T26:01:00.000",
+      "date": "2026-08-30",
+      "offsetSeconds": 93660,
+      "outsideCalendarDay": true,
+      "absolute": "2026-08-31T02:01:00"
+    },
+    {
+      "wire": "2026-08-31T-03:22:00.000",
+      "date": "2026-08-31",
+      "offsetSeconds": -12120,
+      "outsideCalendarDay": true,
+      "absolute": "2026-08-30T20:38:00"
+    },
+    {
+      "wire": "2026-08-31T-02:00:00.000",
+      "date": "2026-08-31",
+      "offsetSeconds": -7200,
+      "outsideCalendarDay": true,
+      "absolute": "2026-08-30T22:00:00"
+    },
+    {
+      "wire": "2026-08-30T-24:00:00.000",
+      "date": "2026-08-30",
+      "offsetSeconds": -86400,
+      "outsideCalendarDay": true,
+      "absolute": "2026-08-29T00:00:00"
+    },
+    {
+      "wire": "2026-08-30T48:00:00.000",
+      "date": "2026-08-30",
+      "offsetSeconds": 172800,
+      "outsideCalendarDay": true,
+      "absolute": "2026-09-01T00:00:00"
+    },
+    {
+      "wire": "2026-08-30T23:59:59.000",
+      "date": "2026-08-30",
+      "offsetSeconds": 86399,
+      "outsideCalendarDay": false,
+      "absolute": "2026-08-30T23:59:59"
+    },
+    {
+      "wire": "2028-02-29T12:00:00.000",
+      "date": "2028-02-29",
+      "offsetSeconds": 43200,
+      "outsideCalendarDay": false,
+      "absolute": "2028-02-29T12:00:00"
+    }
+  ],
+  "canonicalisation": [
+    {
+      "input": "2026-08-30T-00:00:00.000",
+      "canonical": "2026-08-30T00:00:00.000",
+      "why": "negative zero is redundant but unambiguous; accepted and normalised"
+    },
+    {
+      "input": "  2026-08-30T09:30:00.000  ",
+      "canonical": "2026-08-30T09:30:00.000",
+      "why": "surrounding whitespace is trimmed"
+    }
+  ],
+  "invalid": [
+    {
+      "wire": "2026-08-30T09:30:00.000Z",
+      "reasonContains": "no timezone"
+    },
+    {
+      "wire": "2026-08-30T09:30:00.000z",
+      "reasonContains": "no timezone"
+    },
+    {
+      "wire": "2026-08-30T09:30:00.000+09:00",
+      "reasonContains": "no timezone"
+    },
+    {
+      "wire": "2026-08-30T09:30:00.000+0900",
+      "reasonContains": "no timezone"
+    },
+    {
+      "wire": "2026-08-30T09:30:00.500",
+      "reasonContains": "second-granularity"
+    },
+    {
+      "wire": "2026-08-30T48:00:01.000",
+      "reasonContains": "72-hour window"
+    },
+    {
+      "wire": "2026-08-30T-24:00:01.000",
+      "reasonContains": "72-hour window"
+    },
+    {
+      "wire": "2026-08-30T09:60:00.000",
+      "reasonContains": "minute field"
+    },
+    {
+      "wire": "2026-08-30T09:00:60.000",
+      "reasonContains": "second field"
+    },
+    {
+      "wire": "2026-02-30T09:00:00.000",
+      "reasonContains": "not a real calendar date"
+    },
+    {
+      "wire": "2027-02-29T09:00:00.000",
+      "reasonContains": "not a real calendar date"
+    },
+    {
+      "wire": "2026-08-30T09:30:00",
+      "reasonContains": "expected"
+    },
+    {
+      "wire": "2026-08-30T09:30:00.00",
+      "reasonContains": "expected"
+    },
+    {
+      "wire": "2026-08-30 09:30:00.000",
+      "reasonContains": "expected"
+    },
+    {
+      "wire": "2026-08-30T+09:30:00.000",
+      "reasonContains": "expected"
+    },
+    {
+      "wire": "2026-8-30T09:30:00.000",
+      "reasonContains": "expected"
+    },
+    {
+      "wire": "2026-08-30T9:30:00.000",
+      "reasonContains": "expected"
+    },
+    {
+      "wire": "",
+      "reasonContains": "empty"
+    },
+    {
+      "wire": "2026-02-29T09:00:00.000",
+      "reasonContains": "not a real calendar date"
+    }
+  ],
+  "ordering": {
+    "$comment": "Sorted ascending by the canonical business ordering: date first, then offset.",
+    "ascending": [
+      "2026-08-30T-24:00:00.000",
+      "2026-08-30T09:00:00.000",
+      "2026-08-30T26:01:00.000",
+      "2026-08-31T-03:22:00.000",
+      "2026-08-31T48:00:00.000"
+    ],
+    "disagreements": [
+      {
+        "left": "2026-08-30T26:01:00.000",
+        "right": "2026-08-31T-03:22:00.000",
+        "business": "left-first",
+        "absolute": "right-first",
+        "why": "the canonical case from the brief: day-level comparison wins over the wall clock"
+      }
+    ]
+  }
+}

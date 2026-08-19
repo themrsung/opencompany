@@ -1,0 +1,27 @@
+# Integration tests run against a real PostgreSQL (see DatabaseTestSupport).
+# Never H2: this schema uses generated columns, domain constraints and
+# text_pattern_ops indexes, none of which H2 models the same way.
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    clean-disabled: false
+coreintra:
+  security:
+    # A fixed, publicly known key, deliberately: it exists only so the test
+    # context can start. Production still refuses to boot without one of its
+    # own (AuthConfiguration#secretCipher), which is the behaviour under test
+    # elsewhere; without this line every integration test would instead depend
+    # on whatever the developer happened to export.
+    secret-encryption-key: test-only-key-never-used-by-any-real-installation
+  # The production defaults are absolute paths under /var/lib, which a test JVM
+  # is quite right not to be able to create. Pointing them at the temp
+  # directory keeps the real defaults honest — nothing here weakens them — while
+  # letting the context start on a developer machine and on a CI runner alike.
+  blob-path: ${java.io.tmpdir}/coreintra-test/blobs
+  font-path: ${java.io.tmpdir}/coreintra-test/fonts
+logging:
+  level:
+    org.hibernate.SQL: WARN

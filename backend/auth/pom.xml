@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>com.coreintra</groupId>
+    <artifactId>coreintra-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+  <artifactId>auth</artifactId>
+  <name>CoreIntra :: Auth</name>
+  <dependencies>
+    <!-- javax.mail, not jakarta.mail: Boot 2.7 is the javax line (ADR 0001).
+         Optional so an installation with no mail system carries no mail code. -->
+    <dependency>
+      <groupId>com.sun.mail</groupId>
+      <artifactId>javax.mail</artifactId>
+      <version>1.6.2</version>
+      <optional>true</optional>
+    </dependency>
+    <dependency><groupId>com.coreintra</groupId><artifactId>platform-compat</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>com.coreintra</groupId><artifactId>business-time</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>com.coreintra</groupId><artifactId>core-domain</artifactId><version>${project.version}</version></dependency>
+    <!-- The temporary master account is issued under the company's representation
+         mode, so it needs RepresentationMode and ApprovalState from approval. -->
+    <dependency><groupId>com.coreintra</groupId><artifactId>approval</artifactId><version>${project.version}</version></dependency>  </dependencies>
+</project>

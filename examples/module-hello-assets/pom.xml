@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>module-hello-assets</artifactId>
+  <version>1.0.0</version>
+  <name>Example client module :: Hello Assets</name>
+
+  <properties>
+    <!-- Java 8, like the platform. A module compiled for a newer release will
+         not load on a client site running an old JRE, which is the entire
+         reason the platform targets 8. -->
+    <maven.compiler.release>8</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.coreintra</groupId>
+      <artifactId>module-api</artifactId>
+      <version>0.1.0-SNAPSHOT</version>
+      <!-- provided: the SPI comes from the host at runtime. Bundling a second
+           copy would give you two incompatible IntranetModule interfaces and a
+           ServiceLoader that silently finds neither. -->
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+</project>

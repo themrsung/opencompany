@@ -1,0 +1,180 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "claude/**"]
+  pull_request:
+
+# A milestone ends green or it has not ended: ./mvnw verify and pnpm test &&
+# pnpm build both pass, and the Java 8 gate is proven rather than assumed.
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: coreintra_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # Build on a modern JDK; --release 8 pins the output, and
+          # animal-sniffer checks the API surface independently.
+          java-version: "21"
+          cache: maven
+
+      - name: Prove the Java 8 gate is live
+        run: ./ops/verify-java8-gate.sh
+
+      - name: Verify
+        working-directory: backend
+        run: ./mvnw -B verify
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/coreintra_test
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: postgres
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-test-reports
+          path: backend/*/target/surefire-reports/
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck (strict, no any)
+        working-directory: frontend
+        run: pnpm exec tsc --noEmit -p tsconfig.json
+
+      - name: Lint
+        working-directory: frontend
+        run: pnpm lint
+
+      - working-directory: frontend
+        run: pnpm test
+
+      - working-directory: frontend
+        run: pnpm build
+
+  backup-restore:
+    # §1 asks that restore be proven by a test rather than by a runbook. The
+    # main backend job supplies SPRING_DATASOURCE_URL, under which this test
+    # skips itself with a reason — it runs pg_dump inside the database
+    # container, the way ops/backup.sh does, so it needs Testcontainers to own
+    # the container. Hence its own job with no datasource in the environment.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21", cache: maven }
+      - name: Prove the backup restores, twice, the second time over a populated database
+        working-directory: backend
+        run: ./mvnw -B -pl app -am test -Dtest=BackupRestoreTest -DfailIfNoSpecifiedTests=false
+
+  api-client-drift:
+    # API types are generated from the backend's OpenAPI spec. Drift between the
+    # spec and the committed client fails the build rather than being noticed
+    # later by a broken screen.
+    #
+    # Both halves are regenerated here, not just the client: OpenApiSpecTest
+    # rewrites docs/api/openapi.json from the booted application, so a backend
+    # change that alters the wire shape shows up as a diff in the spec even if
+    # nobody touched the frontend.
+    runs-on: ubuntu-latest
+    needs: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: coreintra_spec
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21", cache: maven }
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      # The generator lives in the api-client package, so its dependencies have
+      # to be on disk before the drift script can run.
+      - working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Regenerate the OpenAPI document from the running application
+        working-directory: backend
+        run: ./mvnw -B -q -pl app -am test -Dtest=OpenApiSpecTest -DfailIfNoSpecifiedTests=false
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/coreintra_spec
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: postgres
+
+      - name: Regenerate the API client and fail on any diff
+        run: ./ops/check-api-client-drift.sh
+
+  example-module:
+    # The worked example is built against the real SPI, so it cannot rot into
+    # pseudocode while the docs keep claiming it works.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21", cache: maven }
+      - name: Install the SPI
+        working-directory: backend
+        run: ./mvnw -B -q install -DskipTests -pl platform-compat,business-time,module-api -am
+      - name: Build the example module
+        working-directory: examples/module-hello-assets
+        run: mvn -B package
+
+  dependency-posture:
+    # Boot 2.7 is past OSS EOL (ADR 0001). Known CVEs are documented in
+    # docs/security/dependency-posture.md; this job keeps that document honest.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21", cache: maven }
+      - working-directory: backend
+        run: ./mvnw -B org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=11 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-check-report
+          path: backend/**/target/dependency-check-report.html
